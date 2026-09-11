@@ -10,7 +10,7 @@ tags:
 draft: false
 language: Chinese
 comment: true
-ai: true
+ai: ai
 ---
 
 新搞了台树莓派，连上热点 SSH 准备换国内源。习惯性打开 `/etc/apt/sources.list`，发现里面居然是空的。按照老习惯把清华源贴进去，跑 `apt update` 却冒出一堆重复源（duplicate sources）警告，源也没真正换成。
