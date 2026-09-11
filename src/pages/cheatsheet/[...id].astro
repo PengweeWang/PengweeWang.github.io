@@ -1,0 +1,113 @@
+---
+import { type CollectionEntry, getCollection, render } from 'astro:content'
+import { BackToTop } from 'astro-pure/components/pages'
+import { Button } from 'astro-pure/user'
+import PageLayout from '@/layouts/BaseLayout.astro'
+
+type CommandEntry = CollectionEntry<'commands'>
+
+export const prerender = true
+
+export async function getStaticPaths() {
+  const commands: CommandEntry[] = await getCollection('commands')
+  return commands.map((command: CommandEntry) => {
+    const slug = command.id.replace(/\.[^/.]+$/, '')
+
+    // 查找并匹配关联命令
+    const relatedList = command.data.related || []
+    const relatedCommands = commands
+      .filter((c: CommandEntry) => {
+        const cSlug = c.id.replace(/\.[^/.]+$/, '')
+        const cTitle = (c.data.title || cSlug).toLowerCase()
+        return (
+          cSlug !== slug &&
+          relatedList.some(
+            (r: string) => r.toLowerCase() === cSlug || r.toLowerCase() === cTitle
+          )
+        )
+      })
+      .map((c: CommandEntry) => ({
+        slug: c.id.replace(/\.[^/.]+$/, ''),
+        title: c.data.title || c.id.replace(/\.[^/.]+$/, ''),
+        desc: c.data.desc
+      }))
+
+    return {
+      params: { id: slug },
+      props: { command, relatedCommands }
+    }
+  })
+}
+
+type Props = {
+  command: CommandEntry
+  relatedCommands: {
+    slug: string
+    title: string
+    desc: string
+  }[]
+}
+
+const { command, relatedCommands } = Astro.props
+const { Content } = await render(command)
+const title = command.data.title || command.id.replace(/\.[^/.]+$/, '')
+---
+
+<PageLayout meta={{ title: `${title} - Linux 命令速查`, description: command.data.desc }}>
+  <Button title='Back' href='/cheatsheet' variant='back' />
+
+  <main class='mt-6 lg:mt-10'>
+    {/* 命令头部介绍 */}
+    <div id='content-header' class='animate border-b border-border/60 pb-6'>
+      <div class='flex flex-wrap items-center gap-3 mb-2'>
+        <h1 class='text-3xl font-bold font-mono text-primary m-0'>{title}</h1>
+        {command.data.tags.length > 0 && (
+          <div class='flex flex-wrap gap-1.5'>
+            {command.data.tags.map((t: string) => (
+              <span class='rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground font-mono'>
+                #{t}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <p class='text-base text-muted-foreground m-0'>{command.data.desc}</p>
+    </div>
+
+    {/* 详细内容（正文字号正常 text-base，排版舒展清晰） */}
+    <article id='content' class='animate prose text-base max-w-none mt-8'>
+      <Content />
+    </article>
+
+    {/* 关联命令推荐 */}
+    {
+      relatedCommands.length > 0 && (
+        <section class='mt-12 pt-8 border-t border-border/60 animate'>
+          <h2 class='text-lg font-semibold text-foreground mb-4 flex items-center gap-2'>
+            <span>🔗 相关命令与技巧</span>
+          </h2>
+          <div class='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+            {relatedCommands.map((rel) => (
+              <a
+                href={`/cheatsheet/${rel.slug}`}
+                class='group flex flex-col justify-between rounded-xl border border-border bg-card p-4 text-inherit no-underline transition-all duration-200 hover:border-primary/60 hover:shadow-sm'
+              >
+                <div class='flex items-center justify-between mb-1'>
+                  <span class='font-mono font-bold text-primary text-base group-hover:text-primary transition-colors'>
+                    {rel.title}
+                  </span>
+                  <span class='text-muted-foreground text-sm transition-transform duration-200 group-hover:translate-x-1 group-hover:text-primary'>
+                    →
+                  </span>
+                </div>
+                <p class='text-xs text-muted-foreground m-0 line-clamp-1'>{rel.desc}</p>
+              </a>
+            ))}
+          </div>
+        </section>
+      )
+    }
+  </main>
+
+  <BackToTop />
+</PageLayout>

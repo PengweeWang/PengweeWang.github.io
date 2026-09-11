@@ -1,0 +1,156 @@
+---
+import { type CollectionEntry, getCollection } from 'astro:content'
+import PageLayout from '@/layouts/CommonPage.astro'
+
+type CommandEntry = CollectionEntry<'commands'>
+
+// 获取所有命令并按字母顺序自然排序
+const rawCommands: CommandEntry[] = await getCollection('commands')
+rawCommands.sort((a: CommandEntry, b: CommandEntry) => {
+  const titleA = a.data.title || a.id
+  const titleB = b.data.title || b.id
+  return titleA.localeCompare(titleB)
+})
+
+const commands = rawCommands.map((item) => {
+  const title = item.data.title || item.id.replace(/\.[^/.]+$/, '')
+  const slug = item.id.replace(/\.[^/.]+$/, '')
+  return {
+    id: item.id,
+    slug,
+    title,
+    data: item.data
+  }
+})
+---
+
+<PageLayout title='Linux 命令速查' comment={false} sidebar={false}>
+  <div class='mb-6 space-y-4'>
+    <!-- 统计个数（靠右展示） -->
+    <div class='flex justify-end text-sm text-muted-foreground'>
+      <span class='rounded-md bg-muted px-2.5 py-1 text-xs'>
+        已收录 <strong id='total-count' class='text-primary'>{commands.length}</strong> 个命令与语法
+      </span>
+    </div>
+
+    <!-- 实时检索框 -->
+    <div class='relative'>
+      <input
+        id='command-search'
+        type='text'
+        placeholder='输入命令名、标签或中文场景快速检索（例如: 端口、rsync、grep、解压）...'
+        autocomplete='off'
+        class='w-full rounded-xl border border-border bg-muted/40 px-4 py-3 text-base outline-none transition focus:border-primary focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/70'
+      />
+    </div>
+  </div>
+
+  <!-- 命令缩略卡片响应式网格 -->
+  <div class='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3' id='cards-container'>
+    {
+      commands.map(({ title, slug, data }) => (
+        <a
+          href={`/cheatsheet/${slug}`}
+          class='group command-card flex flex-col justify-between rounded-xl border border-border bg-card p-5 text-inherit no-underline transition-all duration-200 hover:border-primary/60 hover:shadow-sm'
+          data-title={title.toLowerCase()}
+          data-desc={data.desc.toLowerCase()}
+          data-tags={data.tags.join(' ').toLowerCase()}
+        >
+          <div>
+            {/* 卡片头部：命令名称与跳转箭头 */}
+            <div class='flex items-center justify-between gap-2 mb-2'>
+              <h3 class='text-xl font-bold font-mono text-primary group-hover:text-primary m-0 transition-colors'>
+                {title}
+              </h3>
+              <span class='text-muted-foreground text-base transition-transform duration-200 group-hover:translate-x-1 group-hover:text-primary'>
+                →
+              </span>
+            </div>
+
+            {/* 一句话描述（字号正常 text-sm，清晰易读） */}
+            <p class='text-sm text-foreground/80 leading-relaxed m-0 line-clamp-2'>
+              {data.desc}
+            </p>
+          </div>
+
+          {/* 底部标签与查看提示 */}
+          <div class='mt-4 flex items-center justify-between pt-3 border-t border-border/40'>
+            <div class='flex flex-wrap gap-1.5'>
+              {data.tags.length > 0 ? (
+                data.tags.map((t: string) => (
+                  <span class='rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono'>
+                    #{t}
+                  </span>
+                ))
+              ) : (
+                <span class='text-[11px] text-muted-foreground/60'>通用命令</span>
+              )}
+            </div>
+            <span class='text-xs text-primary/80 font-medium group-hover:text-primary shrink-0'>
+              查看详情
+            </span>
+          </div>
+        </a>
+      ))
+    }
+  </div>
+
+  <!-- 搜索无匹配结果的空状态 -->
+  <div id='no-result' class='hidden py-16 text-center text-muted-foreground text-sm'>
+    <p class='text-3xl mb-2'>🔍</p>
+    <p class='text-base font-medium text-foreground mb-1'>未找到匹配的命令</p>
+    <p class='text-xs text-muted-foreground'>请尝试搜索其他关键字或命令名称。</p>
+  </div>
+</PageLayout>
+
+<script>
+  function setupCheatsheet() {
+    const searchInput = document.getElementById('command-search') as HTMLInputElement | null
+    const cards = document.querySelectorAll('.command-card') as NodeListOf<HTMLElement>
+    const noResult = document.getElementById('no-result')
+    const totalCount = document.getElementById('total-count')
+
+    if (!searchInput) return
+
+    let currentKeyword = ''
+
+    function filterCards() {
+      let visibleCount = 0
+
+      cards.forEach((card) => {
+        const title = card.dataset.title || ''
+        const desc = card.dataset.desc || ''
+        const tags = card.dataset.tags || ''
+
+        const matchesKeyword =
+          !currentKeyword ||
+          title.includes(currentKeyword) ||
+          desc.includes(currentKeyword) ||
+          tags.includes(currentKeyword)
+
+        if (matchesKeyword) {
+          card.style.display = 'flex'
+          visibleCount++
+        } else {
+          card.style.display = 'none'
+        }
+      })
+
+      if (noResult) {
+        noResult.classList.toggle('hidden', visibleCount > 0)
+      }
+      if (totalCount) {
+        totalCount.textContent = String(visibleCount)
+      }
+    }
+
+    searchInput.addEventListener('input', (e) => {
+      currentKeyword = (e.target as HTMLInputElement).value.trim().toLowerCase()
+      filterCards()
+    })
+  }
+
+  // 保证初次加载与 Astro 页面切换时均能正常绑定
+  setupCheatsheet()
+  document.addEventListener('astro:page-load', setupCheatsheet)
+</script>

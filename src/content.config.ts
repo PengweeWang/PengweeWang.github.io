@@ -44,4 +44,18 @@ const blog = defineCollection({
     })
 })
 
-export const collections = { blog }
+// Define commands collection for atomic cheatsheets
+const commands = defineCollection({
+  loader: glob({
+    base: './src/content/commands',
+    pattern: '**/*.{md,mdx}'
+  }),
+  schema: z.object({
+    title: z.string().optional(),
+    desc: z.string(),
+    tags: z.array(z.string()).default([]).transform(removeDupsAndLowerCase),
+    related: z.array(z.string()).default([])
+  })
+})
+
+export const collections = { blog, commands }
