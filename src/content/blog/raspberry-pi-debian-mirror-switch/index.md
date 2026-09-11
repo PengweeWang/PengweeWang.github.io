@@ -1,6 +1,6 @@
 ---
 title: 树莓派换源踩坑与脚本：Debian 12/13 deb822 新格式
-description: 记录 Debian 12 与 13 采用 deb822 格式导致传统 sources.list 换源失效的问题，并提供自动兼容新旧格式的换源脚本。
+description: 记录 Debian 12 与 13 改用 deb822 格式导致老方法换源失效的坑，以及兼容新旧格式的换源脚本。
 publishDate: '2026-09-11'
 tags:
   - linux
@@ -10,32 +10,29 @@ tags:
 draft: false
 language: Chinese
 comment: true
-ai: assisted
+ai: true
 ---
 
-新拿到一台树莓派，连上热点 SSH 进去准备换国内源。打开 `/etc/apt/sources.list` 时发现里面是空的，网上搜到的老换源教程写进去不仅不生效，甚至还会引发重复源警告。
+新搞了台树莓派，连上热点 SSH 准备换国内源。习惯性打开 `/etc/apt/sources.list`，发现里面居然是空的。按照老习惯把清华源贴进去，跑 `apt update` 却冒出一堆重复源（duplicate sources）警告，源也没真正换成。
 
-排查后发现，Debian 自 12 (Bookworm) 引入并在 13 (Trixie) 中全面启用了 **deb822** 格式的源配置。
+排查后发现，从 Debian 12 (Bookworm) 开始引入、Debian 13 (Trixie) 全面落地，APT 默认改用了 deb822 格式的 stanza 配置，不再使用传统的单行 `sources.list`。
 
-## 格式差异：传统格式 vs deb822
+## 为什么 sources.list 不管用了？
 
-在 Debian 11 及更早版本中，软件源配置为单行文本格式：
-
-- **Debian 基础源**：`/etc/apt/sources.list`
-- **树莓派专属源**：`/etc/apt/sources.list.d/raspi.list`
+在 Debian 11 及更早版本中，软件源配置是单行格式：Debian 源在 `/etc/apt/sources.list`，树莓派专属源在 `/etc/apt/sources.list.d/raspi.list`。
 
 ```text
 # 传统单行格式
 deb https://mirrors.tuna.tsinghua.edu.cn/debian/ trixie main contrib non-free non-free-firmware
 ```
 
-而从 Debian 12 / 13 开始，APT 转向了类似 RFC 822 风格的 stanza 格式，文件后缀也改为了 `.sources`：
+而新版系统里，原来的 `/etc/apt/sources.list` 默认直接留空，真正的配置挪到了 `/etc/apt/sources.list.d/*.sources`，采用多行的 RFC 822 stanza 风格。
 
-- **Debian 基础源**：`/etc/apt/sources.list.d/debian.sources`
-- **树莓派专属源**：`/etc/apt/sources.list.d/raspi.sources`
-- 原先的 `/etc/apt/sources.list` 默认保留为空文件。
+实际生效的文件有两个：
+- Debian 系统源：`/etc/apt/sources.list.d/debian.sources`
+- 树莓派专属源：`/etc/apt/sources.list.d/raspi.sources`
 
-新的 `debian.sources` 结构如下：
+`debian.sources` 的结构长这样：
 
 ```text
 Types: deb
@@ -51,7 +48,7 @@ Components: main contrib non-free non-free-firmware
 Signed-By: /usr/share/keyrings/debian-archive-keyring.pgp
 ```
 
-树莓派专属的 `raspi.sources` 类似：
+树莓派专用的 `raspi.sources` 也是同样的多行结构：
 
 ```text
 Types: deb
@@ -61,17 +58,16 @@ Components: main
 Signed-By: /usr/share/keyrings/raspberrypi-archive-keyring.pgp
 ```
 
-直接修改这些 `.sources` 文件中的 `URIs` 字段，换源才能真正生效。
+换源只要把对应配置块里的 `URIs` 改成镜像站地址即可。
 
 ## 自动化换源脚本
 
-为了之后给新设备配置时不再手动翻文件改 URL，写了一个一键脚本：
+新设备多了每次手动找 `.sources` 改 `URIs` 挺繁琐的，顺手写了个脚本：
 
-- 自动判断系统是新版 deb822 (`.sources`) 还是旧版 (`.list` / `sources.list`)。
-- 修改前自动为原配置生成时间戳备份（如 `.bak.20260911_140500`）。
-- 同时替换 Debian 官方源与树莓派专属源为清华 TUNA 镜像站。
-- 顺带将当前用户的 Python `pip` 配置指向清华源与阿里源。
-- 自动执行 `apt update` 验证连通性。
+1. 兼容新旧格式：优先检测并替换 deb822（`.sources`），没有就兜底处理旧版的 `sources.list` / `raspi.list`。
+2. 自动备份：改之前带时间戳备份原文件（比如 `.sources.bak.20260911_xxx`），改挂了随时能拷回去。
+3. 把 Debian 系统源和树莓派官方源都切到清华 TUNA，顺带给当前用户配好 pip 镜像（清华主源 + 阿里备用）。
+4. 跑一次 `apt update` 验证连通性。
 
 完整脚本文件：[change_mirrors.sh](/scripts/change_mirrors.sh)
 
@@ -170,12 +166,12 @@ echo "=================================================="
 
 ### 使用方式
 
-**本地执行**：
+如果脚本在本地，直接跑：
 ```bash
 sudo bash change_mirrors.sh
 ```
 
-**远程管道执行（无需拷贝文件）**：
+如果刚 SSH 连上新板子不想把脚本传过去，也可以从本地通过管道直接送过去执行：
 ```bash
 ssh <user>@<host> 'sudo bash -s' < change_mirrors.sh
 ```
