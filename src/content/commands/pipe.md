@@ -1,8 +1,8 @@
 ---
-title: "| (管道符)"
+title: '| (管道符)'
 desc: 将前一个命令的标准输出作为后一个命令的标准输入
 tags: [stream, pipeline, shell]
-related: [redirect, grep, head, tail]
+related: [redirect, grep, head, tail, less]
 ---
 
 ```bash

@@ -102,6 +102,13 @@ bright4=89b4fa
 bright5=f5c2e7
 bright6=94e2d5
 bright7=a6adc8
+
+[key-bindings]
+# 无鼠标时的滚屏按键（支持逐行与半页滚动）
+scrollback-up-line=Control+Shift+Up
+scrollback-down-line=Control+Shift+Down
+scrollback-up-half-page=Control+Shift+k
+scrollback-down-half-page=Control+Shift+j
 ```
 
 ### 4. 运行与配置快捷别名

@@ -2,7 +2,7 @@
 title: head
 desc: 查看文件开头若干行
 tags: [text, preview]
-related: [tail, grep]
+related: [tail, grep, less]
 ---
 
 ```bash

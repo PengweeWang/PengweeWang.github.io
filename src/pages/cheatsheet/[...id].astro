@@ -1,5 +1,6 @@
 ---
-import { type CollectionEntry, getCollection, render } from 'astro:content'
+import { getCollection, render, type CollectionEntry } from 'astro:content'
+
 import { BackToTop } from 'astro-pure/components/pages'
 import { Button } from 'astro-pure/user'
 import PageLayout from '@/layouts/BaseLayout.astro'
@@ -21,9 +22,7 @@ export async function getStaticPaths() {
         const cTitle = (c.data.title || cSlug).toLowerCase()
         return (
           cSlug !== slug &&
-          relatedList.some(
-            (r: string) => r.toLowerCase() === cSlug || r.toLowerCase() === cTitle
-          )
+          relatedList.some((r: string) => r.toLowerCase() === cSlug || r.toLowerCase() === cTitle)
         )
       })
       .map((c: CommandEntry) => ({
@@ -53,7 +52,7 @@ const { Content } = await render(command)
 const title = command.data.title || command.id.replace(/\.[^/.]+$/, '')
 ---
 
-<PageLayout meta={{ title: `${title} - Linux 命令速查`, description: command.data.desc }}>
+<PageLayout meta={{ title: `${title} - Linux 使用技巧`, description: command.data.desc }}>
   <Button title='Back' href='/cheatsheet' variant='back' />
 
   <main class='mt-6 lg:mt-10'>
@@ -61,15 +60,17 @@ const title = command.data.title || command.id.replace(/\.[^/.]+$/, '')
     <div id='content-header' class='animate border-b border-border/60 pb-6'>
       <div class='flex flex-wrap items-center gap-3 mb-2'>
         <h1 class='text-3xl font-bold font-mono text-primary m-0'>{title}</h1>
-        {command.data.tags.length > 0 && (
-          <div class='flex flex-wrap gap-1.5'>
-            {command.data.tags.map((t: string) => (
-              <span class='rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground font-mono'>
-                #{t}
-              </span>
-            ))}
-          </div>
-        )}
+        {
+          command.data.tags.length > 0 && (
+            <div class='flex flex-wrap gap-1.5'>
+              {command.data.tags.map((t: string) => (
+                <span class='rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground font-mono'>
+                  #{t}
+                </span>
+              ))}
+            </div>
+          )
+        }
       </div>
       <p class='text-base text-muted-foreground m-0'>{command.data.desc}</p>
     </div>

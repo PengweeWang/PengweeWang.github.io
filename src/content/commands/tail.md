@@ -2,7 +2,7 @@
 title: tail
 desc: 查看文件末尾若干行及实时追踪更新
 tags: [text, log]
-related: [head, grep]
+related: [head, grep, less]
 ---
 
 ```bash

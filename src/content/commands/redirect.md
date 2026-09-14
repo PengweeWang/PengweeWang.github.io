@@ -1,5 +1,5 @@
 ---
-title: "> / >> (重定向)"
+title: '> / >> (重定向)'
 desc: 标准输入输出重定向与错误输出分流
 tags: [stream, io, redirect]
 related: [pipe]
