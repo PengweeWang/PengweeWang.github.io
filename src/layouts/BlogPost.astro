@@ -5,15 +5,17 @@ import type { CollectionEntry } from 'astro:content'
 // Plugin styles
 import 'katex/dist/katex.min.css'
 
+import { Image } from 'astro:assets'
+import config from 'virtual:config'
+
 import { MediumZoom } from 'astro-pure/advanced'
 import { ArticleBottom, Copyright, Hero, TOC } from 'astro-pure/components/pages'
-import config from 'virtual:config'
+import { Aside } from 'astro-pure/user'
 import PageLayout from '@/layouts/ContentLayout.astro'
 import { Comment, PageInfo } from '@/components/waline'
-import { Image } from 'astro:assets'
+import assistedByAI from '@/assets/ai/assisted-by-ai.svg'
 import writtenByAI from '@/assets/ai/written-by-ai-not-by-human-white.svg'
 import writtenByHuman from '@/assets/ai/written-by-human-not-by-ai-white.svg'
-import assistedByAI from '@/assets/ai/assisted-by-ai.svg'
 
 interface Props {
   post: CollectionEntry<'blog'>
@@ -62,14 +64,38 @@ const primaryColor = data.heroImage?.color ?? 'hsl(var(--primary) / var(--un-tex
     </Fragment>
   </Hero>
 
+  {
+    isAI === 'ai' && (
+      <Aside type='danger' title='AI 生成警示'>
+        本文由 AI 直接生成，未经过完整人工核实，请注意鉴别内容的真实性与准确性。
+      </Aside>
+    )
+  }
+  {
+    isAI === 'assisted' && (
+      <Aside type='caution' title='AI 辅助提示'>
+        本文由 AI 辅助生成，可靠性有保障，但不确保无错误，请结合实际情况参考。
+      </Aside>
+    )
+  }
+
   <slot />
 
-  <div class="flex justify-end">
-    {isAI === 'ai'
-      ? <a href="#"><Image src={writtenByAI} alt="Written by AI , Not by a Human" /></a>
-      : isAI === 'assisted'
-        ? <a href="#"><Image src={assistedByAI} alt="Assisted by AI" /></a>
-        : <a href="https://notbyai.fyi"><Image src={writtenByHuman} alt="Written by a Human , Not by AI" /></a>
+  <div class='flex justify-end'>
+    {
+      isAI === 'ai' ? (
+        <a href='#'>
+          <Image src={writtenByAI} alt='Written by AI , Not by a Human' />
+        </a>
+      ) : isAI === 'assisted' ? (
+        <a href='#'>
+          <Image src={assistedByAI} alt='Assisted by AI' />
+        </a>
+      ) : (
+        <a href='https://notbyai.fyi'>
+          <Image src={writtenByHuman} alt='Written by a Human , Not by AI' />
+        </a>
+      )
     }
   </div>
 
@@ -78,8 +104,7 @@ const primaryColor = data.heroImage?.color ?? 'hsl(var(--primary) / var(--un-tex
     <Copyright {data} />
     {/* Article recommend */}
     <ArticleBottom collections={posts} {id} class='mt-3 sm:mt-6' />
-    { /* Comment */
-    !isDraft && enableComment && <Comment class='mt-3 sm:mt-6' />}
+    {/* Comment */ !isDraft && enableComment && <Comment class='mt-3 sm:mt-6' />}
   </Fragment>
 
   <slot name='bottom-sidebar' slot='bottom-sidebar' />
