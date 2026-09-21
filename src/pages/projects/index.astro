@@ -1,9 +1,9 @@
 ---
 import { Collapse, Spoiler } from 'astro-pure/user'
 import PageLayout from '@/layouts/CommonPage.astro'
-import ProjectSection from '@/components/projects/ProjectSection.astro'
-import Section from '@/components/home/Section.astro'
 import GitHubActivityCalendar from '@/components/home/GitHubActivityCalendar.astro'
+import Section from '@/components/home/Section.astro'
+import ProjectSection from '@/components/projects/ProjectSection.astro'
 
 const headings = [
   { depth: 2, slug: 'programs', text: 'Programs' },
@@ -36,13 +36,12 @@ const withBase = (path: string) =>
       {
         name: '☑ Todo-ai',
         description: 'Todo-ai is a command-line to-do tool with LLM enhanced capabilities',
-        links: [
-          { type: 'github', href: 'https://github.com/PengweeWang/todo-ai-cli' },
-        ]
+        links: [{ type: 'github', href: 'https://github.com/PengweeWang/todo-ai-cli' }]
       },
       {
         name: '🐱 Meowfetch',
-        description: 'Meowfetch is a simple and lightweight system information tool written in Rust.',
+        description:
+          'Meowfetch is a simple and lightweight system information tool written in Rust.',
         links: [
           { type: 'github', href: 'https://github.com/PengweeWang/meowfetch' },
           { type: 'release', href: 'https://github.com/PengweeWang/meowfetch/releases' }
@@ -80,6 +79,11 @@ const withBase = (path: string) =>
   <Collapse title='Mini Tools'>
     <ProjectSection
       projects={[
+        {
+          name: 'REC BBox Visualizer',
+          description: '大模型 REC 任务 Bounding Box 可视化工具 ([0, 1000] 归一化坐标)',
+          links: [{ type: 'site', href: withBase('tools/rec_visualizer/') }]
+        },
         {
           name: 'S3explorer',
           description: '在线S3存储桶查看器',
@@ -175,13 +179,10 @@ const withBase = (path: string) =>
   </Collapse>
 
   <h2 id='sponsorship'>Sponsorship</h2>
-  
-  <p>
-    For sponsorship and cooperation, feel free to contact us.
-  </p>
+
+  <p>For sponsorship and cooperation, feel free to contact us.</p>
 
   <Collapse title='QrCode'>
     <Spoiler>haha, 这里并没有二维码</Spoiler>
   </Collapse>
-
 </PageLayout>

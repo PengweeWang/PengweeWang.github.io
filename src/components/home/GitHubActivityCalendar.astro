@@ -4,13 +4,14 @@ import {
   eachDayOfInterval,
   formatISO,
   getDay,
+  getMonth,
+  getYear,
+  isValid,
   nextDay,
   parseISO,
-  subWeeks,
-  getYear,
-  getMonth,
-  isValid,
+  subWeeks
 } from 'date-fns'
+
 type WeekdayIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6
 type GitHubActivityDay = { date: string; count: number; level: number }
 type GitHubActivityWeek = Array<GitHubActivityDay | undefined>
@@ -32,7 +33,7 @@ function range(n: number) {
 
 async function fetchData(
   username: string,
-  year: number | 'last',
+  year: number | 'last'
 ): Promise<GitHubActivityApiResponse> {
   function validateActivities(activities: Array<GitHubActivityDay>) {
     if (activities.length === 0) {
@@ -48,16 +49,35 @@ async function fetchData(
     }
   }
   const apiUrl = 'https://github-contributions-api.jogruber.de/v4/'
-  const response = await fetch(`${apiUrl}${username}?y=${String(year)}`)
-  const data = (await response.json()) as GitHubActivityApiResponse
-  if (!response.ok) {
-    const message = data.error || 'Unknown error'
-    throw Error(`Fetching GitHub contribution data for "${username}" failed: ${message}`)
+  try {
+    const response = await fetch(`${apiUrl}${username}?y=${String(year)}`, {
+      signal: AbortSignal.timeout(4000)
+    })
+    if (!response.ok) {
+      throw Error(
+        `Fetching GitHub contribution data for "${username}" failed: ${response.statusText}`
+      )
+    }
+    const data = (await response.json()) as GitHubActivityApiResponse
+    validateActivities(data.contributions)
+    return data
+  } catch (error) {
+    console.warn(
+      `[GitHubActivityCalendar] Using fallback contribution data for "${username}" due to:`,
+      error
+    )
+    const today = new Date()
+    const contributions: GitHubActivityDay[] = []
+    for (let i = 365; i >= 0; i--) {
+      const d = new Date(today)
+      d.setDate(d.getDate() - i)
+      contributions.push({ date: formatISO(d, { representation: 'date' }), count: 0, level: 0 })
+    }
+    return {
+      contributions,
+      total: { lastYear: 0, [year]: 0 }
+    }
   }
-
-  validateActivities(data.contributions)
-
-  return data
 }
 
 function calcColorScale(steps: number): Array<string> {
@@ -74,7 +94,7 @@ function fillHoles(activities: Array<GitHubActivityDay>): Array<GitHubActivityDa
 
   return eachDayOfInterval({
     start: parseISO(firstActivity.date),
-    end: parseISO(lastActivity.date),
+    end: parseISO(lastActivity.date)
   }).map((day) => {
     const date = formatISO(day, { representation: 'date' })
     if (calendar.has(date)) {
@@ -83,14 +103,14 @@ function fillHoles(activities: Array<GitHubActivityDay>): Array<GitHubActivityDa
     return {
       date,
       count: 0,
-      level: 0,
+      level: 0
     }
   })
 }
 
 function groupByWeeks(
   activities: Array<GitHubActivityDay>,
-  weekStart: WeekdayIndex = 0, // 0 = Sunday
+  weekStart: WeekdayIndex = 0 // 0 = Sunday
 ): Array<GitHubActivityWeek> {
   const normalizedActivities = fillHoles(activities)
   // Determine the first date of the calendar. If the first date is not the
@@ -98,28 +118,26 @@ function groupByWeeks(
   const firstActivity = normalizedActivities[0] as GitHubActivityDay
   const firstDate = parseISO(firstActivity.date)
   const firstCalendarDate =
-    getDay(firstDate) === weekStart
-      ? firstDate
-      : subWeeks(nextDay(firstDate, weekStart), 1)
+    getDay(firstDate) === weekStart ? firstDate : subWeeks(nextDay(firstDate, weekStart), 1)
   // To correctly group activities by week, it is necessary to left-pad the list
   // because the first date might not be set start weekday.
   const paddedActivities = [
     ...(Array(differenceInCalendarDays(firstDate, firstCalendarDate)).fill(
-      undefined,
+      undefined
     ) as Array<GitHubActivityDay>),
-    ...normalizedActivities,
+    ...normalizedActivities
   ]
   const numberOfWeeks = Math.ceil(paddedActivities.length / 7)
 
   // Finally, group activities by week
   return [...Array(numberOfWeeks).keys()].map((weekIndex) =>
-    paddedActivities.slice(weekIndex * 7, weekIndex * 7 + 7),
+    paddedActivities.slice(weekIndex * 7, weekIndex * 7 + 7)
   )
 }
 
 function getMonthLabels(
   weeks: Array<GitHubActivityWeek>,
-  monthNames: Array<string>,
+  monthNames: Array<string>
 ): Array<GitHubActivityMonthLabel> {
   return weeks
     .reduce<Array<GitHubActivityMonthLabel>>((labels, week, weekIndex) => {
@@ -130,7 +148,7 @@ function getMonthLabels(
       const month = monthNames[getMonth(parseISO(firstActivity.date))]
       if (!month) {
         const monthName = new Date(firstActivity.date).toLocaleString('en-US', {
-          month: 'short',
+          month: 'short'
         })
         throw new Error(`Unexpected error: undefined month label for ${monthName}.`)
       }
@@ -177,48 +195,32 @@ const firstActivity = activities[0]
 const activityYear = getYear(parseISO(firstActivity.date))
 const weeks = groupByWeeks(activities, weekStart)
 const labels = {
-  months: [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ],
+  months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
   totalCount: `{{count}} contributions in ${year === 'last' ? 'the last year' : '{{year}}'}`,
   legend: {
     less: 'Less',
-    more: 'More',
-  },
+    more: 'More'
+  }
 }
 const labelHeight = hideMonthLabels ? 0 : fontSize + labelMargin
 const width = weeks.length * (blockSize + blockMargin) - blockMargin
 const height = labelHeight + (blockSize + blockMargin) * 7 - blockMargin
 ---
 
-<article
-  id="github-activity-calendar"
-  class="w-full min-w-0 flex flex-col gap-2 text-sm"
->
+<article id='github-activity-calendar' class='w-full min-w-0 flex flex-col gap-2 text-sm'>
   <div
-    class="w-full overflow-x-auto pt-0.5"
+    class='w-full overflow-x-auto pt-0.5'
     style={{
       // Don't cover the calendar with the scrollbar.
-      scrollbarGutter: 'stable',
+      scrollbarGutter: 'stable'
     }}
   >
     <svg
-      class="block visible max-w-none"
+      class='block visible max-w-none'
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="xMidYMid meet"
+      preserveAspectRatio='xMidYMid meet'
     >
       {
         !hideMonthLabels && (
@@ -227,8 +229,8 @@ const height = labelHeight + (blockSize + blockMargin) * 7 - blockMargin
               <text
                 x={(blockSize + blockMargin) * weekIndex}
                 y={0}
-                dominant-baseline="hanging"
-                fill="currentColor"
+                dominant-baseline='hanging'
+                fill='currentColor'
               >
                 {label}
               </text>
@@ -243,7 +245,7 @@ const height = labelHeight + (blockSize + blockMargin) * 7 - blockMargin
               if (!activity) return null
               return (
                 <rect
-                  class="stroke-foreground/10"
+                  class='stroke-foreground/10'
                   x={0}
                   y={labelHeight + (blockSize + blockMargin) * dayIndex}
                   width={blockSize}
@@ -263,7 +265,7 @@ const height = labelHeight + (blockSize + blockMargin) * 7 - blockMargin
   </div>
   {
     !(hideTotalCount && hideColorLegend) && (
-      <footer class="flex flex-col sm:flex-row sm:justify-between gap-x-1 gap-y-2">
+      <footer class='flex flex-col sm:flex-row sm:justify-between gap-x-1 gap-y-2'>
         {!hideTotalCount && (
           <div>
             {labels.totalCount
@@ -274,12 +276,12 @@ const height = labelHeight + (blockSize + blockMargin) * 7 - blockMargin
           </div>
         )}
         {!hideColorLegend && (
-          <div class="flex items-center gap-[3px]">
-            <span class="mr-1.5">{labels.legend.less}</span>
+          <div class='flex items-center gap-[3px]'>
+            <span class='mr-1.5'>{labels.legend.less}</span>
             {range(maxLevel + 1).map((level) => (
               <svg width={blockSize} height={blockSize}>
                 <rect
-                  class="stroke-foreground/10"
+                  class='stroke-foreground/10'
                   width={blockSize}
                   height={blockSize}
                   style={`fill: ${colorScale[level]}`}
@@ -288,7 +290,7 @@ const height = labelHeight + (blockSize + blockMargin) * 7 - blockMargin
                 />
               </svg>
             ))}
-            <span class="ml-1.5">{labels.legend.more}</span>
+            <span class='ml-1.5'>{labels.legend.more}</span>
           </div>
         )}
       </footer>

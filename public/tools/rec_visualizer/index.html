@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REC BBox Visualizer - 大模型目标检测与定位可视化工具</title>
+    <link rel="icon" type="image/x-icon" href="/favicon/favicon.ico">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                        },
+                        dark: {
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                            600: '#475569',
+                            500: '#64748b'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(71, 85, 105, 0.6);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 116, 139, 0.9);
+        }
+        /* Canvas transparent checkerboard pattern */
+        .checkerboard {
+            background-color: #0f172a;
+            background-image: 
+                linear-gradient(45deg, #1e293b 25%, transparent 25%), 
+                linear-gradient(-45deg, #1e293b 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #1e293b 75%), 
+                linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+        .drag-over {
+            border-color: #22c55e !important;
+            background-color: rgba(34, 197, 94, 0.1) !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen max-h-screen overflow-hidden flex flex-col font-sans select-none antialiased">
+
+    <!-- Top Navigation Bar -->
+    <header class="h-14 border-b border-slate-800/80 bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between shrink-0 z-30">
+        <div class="flex items-center space-x-3">
+            <a href="/projects" class="inline-flex items-center text-xs text-slate-400 hover:text-emerald-400 transition-colors py-1.5 px-2.5 rounded-md bg-slate-800 hover:bg-slate-700/80 border border-slate-700">
+                <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                </svg>
+                返回 Projects
+            </a>
+            <div class="h-4 w-px bg-slate-700"></div>
+            <div class="flex items-center space-x-2">
+                <span class="text-base font-bold bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent flex items-center gap-1.5">
+                    <svg class="w-5 h-5 text-emerald-400 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                    </svg>
+                    REC BBox Visualizer
+                </span>
+            </div>
+        </div>
+
+        <!-- Header Right Actions -->
+        <div class="flex items-center space-x-2">
+            <button id="helpBtn" title="使用说明" class="px-2.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition flex items-center gap-1.5 text-xs">
+                <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span>使用说明</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace (Split View) -->
+    <div class="flex-1 min-h-0 w-full flex flex-col lg:flex-row overflow-hidden relative">
+
+        <!-- Left Sidebar: Controls & Inputs -->
+        <aside class="w-full lg:w-[460px] xl:w-[490px] h-full border-b lg:border-b-0 lg:border-r border-slate-800/80 bg-slate-900/60 flex flex-col shrink-0 overflow-y-auto z-20">
+            <div class="p-4 space-y-4">
+
+                <!-- Section 1: Image Source Input -->
+                <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-3.5 shadow-sm space-y-3">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                            1. 输入图片 (本地 / 在线网页)
+                        </label>
+                        <span id="imageMetaBadge" class="text-[11px] font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                            未加载图片
+                        </span>
+                    </div>
+
+                    <!-- Source Selection Tabs -->
+                    <div class="grid grid-cols-2 gap-1 bg-slate-950/60 p-1 rounded-lg border border-slate-800 text-xs">
+                        <button id="tabLocalBtn" class="py-1.5 px-3 rounded-md font-medium text-center transition-all bg-emerald-600 text-white shadow-sm flex items-center justify-center gap-1.5">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                            </svg>
+                            本地文件 / 粘贴
+                        </button>
+                        <button id="tabUrlBtn" class="py-1.5 px-3 rounded-md font-medium text-center transition-all text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path>
+                            </svg>
+                            在线图片 / 网页链接
+                        </button>
+                    </div>
+
+                    <!-- Tab Panel 1: Local Upload & Paste -->
+                    <div id="panelLocal" class="space-y-2">
+                        <div id="dropzone" class="border-2 border-dashed border-slate-700 hover:border-emerald-500/60 bg-slate-950/40 rounded-lg p-4 text-center cursor-pointer transition-colors group">
+                            <input type="file" id="fileInput" accept="image/*" class="hidden">
+                            <div class="flex flex-col items-center justify-center space-y-2">
+                                <div class="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-emerald-400 group-hover:scale-110 transition-transform">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                                    </svg>
+                                </div>
+                                <div class="text-xs text-slate-300">
+                                    <span class="font-semibold text-emerald-400">点击选择图片</span> 或拖拽到此处
+                                </div>
+                                <div class="text-[11px] text-slate-500">
+                                    支持 PNG, JPG, WebP 等格式，或直接按 <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono">Ctrl + V</kbd> 粘贴
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab Panel 2: Online URL / Webpage -->
+                    <div id="panelUrl" class="hidden space-y-2">
+                        <div class="flex flex-col space-y-2">
+                            <div class="relative">
+                                <input type="url" id="urlInput" placeholder="输入图片链接 (https://...) 或在线网页链接" class="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-500 outline-none font-mono">
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button id="loadImgUrlBtn" class="py-1.5 px-3 bg-emerald-600/90 hover:bg-emerald-600 text-white rounded-lg text-xs font-medium transition flex items-center justify-center gap-1">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                    加载图片链接
+                                </button>
+                                <button id="loadWebSnapBtn" class="py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 hover:border-cyan-500/50 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1" title="通过在线快照服务获取指定网页全貌截图 (适用于 Web REC / GUI Agent)">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path>
+                                    </svg>
+                                    抓取网页快照
+                                </button>
+                            </div>
+                            <div class="text-[11px] text-slate-500 flex items-center gap-1">
+                                <svg class="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span>若远程图片由于跨域限制无法读取，将自动通过镜像中转加载。</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: LLM Response & BBox Coordinates Input -->
+                <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-3.5 shadow-sm space-y-3">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                            2. 大模型回复 / REC BBox 输入
+                        </label>
+                        <div class="flex items-center space-x-1.5">
+                            <button id="clearInputBtn" class="text-[11px] text-slate-400 hover:text-slate-200 px-1.5 py-0.5 rounded hover:bg-slate-800 transition">
+                                清空
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Config Selectors: Format & Range -->
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                            <span class="block text-[11px] text-slate-400 mb-1">坐标顺序 (Order):</span>
+                            <select id="coordOrderSelect" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-md px-2 py-1.5 text-xs focus:border-emerald-500 outline-none">
+                                <option value="ymin_xmin_ymax_xmax" selected>[ymin, xmin, ymax, xmax] (Qwen/Florence)</option>
+                                <option value="xmin_ymin_xmax_ymax">[xmin, ymin, xmax, ymax] (标准 VOC)</option>
+                                <option value="xmin_ymin_w_h">[xmin, ymin, w, h] (COCO 宽高)</option>
+                                <option value="cx_cy_w_h">[cx, cy, w, h] (中心点宽高)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <span class="block text-[11px] text-slate-400 mb-1">数值范围 (Scale):</span>
+                            <select id="coordScaleSelect" class="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded-md px-2 py-1.5 text-xs focus:border-emerald-500 outline-none">
+                                <option value="1000" selected>[0, 1000] 归一化 (千分制)</option>
+                                <option value="1">[0, 1] 浮点归一化</option>
+                                <option value="pixel">绝对像素 (Pixel)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Response Textarea -->
+                    <div class="relative">
+                        <textarea id="modelOutputInput" rows="6" placeholder="直接粘贴大模型生成的文本、标签或 JSON 内容，支持多种格式自动解析：
+• Qwen-VL: <ref>red car</ref><box>[240, 110, 780, 520]</box>
+• Florence-2: <phrase>car</phrase><loc_240><loc_110><loc_780><loc_520>
+• JSON 格式: {'box_2d': [240, 110, 780, 520], 'label': 'car'}
+• 数组列表: [[240, 110, 780, 520], [100, 200, 300, 400]]
+• 纯坐标: 240, 110, 780, 520" class="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-lg p-2.5 text-xs text-slate-200 font-mono placeholder-slate-600 outline-none resize-y leading-relaxed"></textarea>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-1">
+                        <span id="parseStatusText" class="text-[11px] text-slate-400 flex items-center gap-1">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                            输入内容时将自动实时解析
+                        </span>
+                        <button id="manualParseBtn" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-medium transition flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            重新解析
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Section 3: Detected Objects List -->
+                <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-3.5 shadow-sm space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                                </svg>
+                                3. 已解析目标列表
+                            </label>
+                            <span id="targetCountBadge" class="text-[11px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded-full font-mono border border-emerald-500/30">
+                                0
+                            </span>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <button id="toggleAllVisibilityBtn" class="text-[11px] text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded hover:bg-slate-800 transition">
+                                全部隐藏
+                            </button>
+                            <button id="clearBoxesBtn" class="text-[11px] text-rose-400 hover:text-rose-300 px-2 py-0.5 rounded hover:bg-slate-800 transition">
+                                清空目标
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Target Box Cards Container -->
+                    <div id="targetListContainer" class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                        <div class="text-center py-6 text-slate-500 text-xs italic">
+                            暂无解析目标，请在上方输入大模型回复
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 4: Display & Visual Settings -->
+                <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-3.5 shadow-sm space-y-3">
+                    <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                        </svg>
+                        4. 渲染风格与显示设置
+                    </label>
+
+                    <div class="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                                <span>线框粗细:</span>
+                                <span id="lineWidthVal" class="font-mono text-slate-300">2.5 px</span>
+                            </div>
+                            <input type="range" id="lineWidthInput" min="1" max="8" step="0.5" value="2.5" class="w-full accent-emerald-500">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                                <span>填充透明度:</span>
+                                <span id="fillOpacityVal" class="font-mono text-slate-300">15%</span>
+                            </div>
+                            <input type="range" id="fillOpacityInput" min="0" max="0.6" step="0.05" value="0.15" class="w-full accent-emerald-500">
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-300">
+                        <label class="flex items-center space-x-1.5 cursor-pointer">
+                            <input type="checkbox" id="showLabelCheckbox" checked class="rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-0">
+                            <span>显示标签文本</span>
+                        </label>
+                        <label class="flex items-center space-x-1.5 cursor-pointer">
+                            <input type="checkbox" id="showCoordsCheckbox" checked class="rounded bg-slate-950 border-slate-700 text-emerald-500 focus:ring-0">
+                            <span>显示归一化坐标</span>
+                        </label>
+                    </div>
+
+                    <!-- Export Actions -->
+                    <div class="pt-2 border-t border-slate-800 grid grid-cols-3 gap-2">
+                        <button id="downloadImageBtn" class="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-emerald-500/50 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1">
+                            <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                            </svg>
+                            导出图片
+                        </button>
+                        <button id="copyImageBtn" class="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-emerald-500/50 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1">
+                            <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
+                            </svg>
+                            复制图像
+                        </button>
+                        <button id="exportJsonBtn" class="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-emerald-500/50 rounded-lg text-xs font-medium transition flex items-center justify-center gap-1">
+                            <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                            </svg>
+                            导出 JSON
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </aside>
+
+        <!-- Right Canvas Viewport -->
+        <main class="flex-1 min-w-0 min-h-0 h-full flex flex-col bg-slate-950 relative overflow-hidden">
+            
+            <!-- Viewport Toolbar (Floating Top) -->
+            <div class="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none z-10">
+                <!-- Left: Mode Switcher -->
+                <div class="pointer-events-auto flex items-center space-x-1 bg-slate-900/90 backdrop-blur border border-slate-800 rounded-lg p-1 shadow-lg text-xs">
+                    <button id="modePanBtn" class="px-2.5 py-1 rounded-md font-medium text-white bg-emerald-600 transition flex items-center gap-1">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path>
+                        </svg>
+                        平移与缩放
+                    </button>
+                    <button id="modeDrawBtn" class="px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-slate-200 transition flex items-center gap-1" title="在图片上拖拽绘制新标注框，并实时生成 [0, 1000] 归一化坐标">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        手动绘制框
+                    </button>
+                </div>
+
+                <!-- Right: Zoom & Reset Controls -->
+                <div class="pointer-events-auto flex items-center space-x-1 bg-slate-900/90 backdrop-blur border border-slate-800 rounded-lg p-1 shadow-lg text-xs">
+                    <button id="zoomOutBtn" class="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-white transition" title="缩小 (滚轮下滑)">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path>
+                        </svg>
+                    </button>
+                    <span id="zoomLevelBadge" class="font-mono text-[11px] text-slate-300 px-2 py-0.5 min-w-[50px] text-center">
+                        100%
+                    </span>
+                    <button id="zoomInBtn" class="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-white transition" title="放大 (滚轮上滑)">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                    </button>
+                    <div class="w-px h-3.5 bg-slate-700 mx-0.5"></div>
+                    <button id="fitScreenBtn" class="px-2 py-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white transition" title="自适应窗口大小">
+                        适应窗口
+                    </button>
+                    <button id="resetZoomBtn" class="px-2 py-1 rounded hover:bg-slate-800 text-slate-300 hover:text-white transition" title="还原为 100% 原始大小">
+                        1:1
+                    </button>
+                </div>
+            </div>
+
+            <!-- Canvas Display Area -->
+            <div id="viewportContainer" class="flex-1 min-h-0 w-full relative overflow-hidden checkerboard cursor-grab active:cursor-grabbing flex items-center justify-center">
+                <!-- Empty State Prompt -->
+                <div id="emptyPrompt" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center pointer-events-none z-0">
+                    <div class="w-16 h-16 rounded-2xl bg-slate-800/80 border border-slate-700/80 flex items-center justify-center mb-4 text-emerald-400 shadow-xl backdrop-blur">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-base font-semibold text-slate-200 mb-1">等待加载图片</h3>
+                    <p class="text-xs text-slate-400 max-w-sm mb-4 leading-relaxed">
+                        支持从本地选择、拖拽图片、按 Ctrl+V 粘贴截图，或在左侧输入在线图片 / 网页链接抓取快照。
+                    </p>
+                    <div class="flex items-center space-x-2 pointer-events-auto">
+                        <button onclick="document.getElementById('fileInput').click()" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium shadow transition flex items-center gap-1.5">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                            </svg>
+                            选择本地图片
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Interactive Rendering Canvas -->
+                <canvas id="mainCanvas" class="absolute inset-0 w-full h-full shadow-2xl transition-opacity duration-200 max-w-none opacity-0 pointer-events-none"></canvas>
+
+                <!-- Tooltip Overlay -->
+                <div id="canvasTooltip" class="absolute pointer-events-none hidden bg-slate-900/95 border border-slate-700 text-slate-100 px-2.5 py-1.5 rounded-lg shadow-xl text-xs z-30 max-w-xs backdrop-blur font-sans">
+                    <div id="tooltipTitle" class="font-bold text-emerald-400 mb-0.5"></div>
+                    <div id="tooltipNormCoords" class="font-mono text-[11px] text-slate-300"></div>
+                    <div id="tooltipPixelCoords" class="font-mono text-[10px] text-slate-500"></div>
+                </div>
+            </div>
+
+            <!-- Floating Bottom Status Bar -->
+            <footer class="h-8 shrink-0 border-t border-slate-800/80 bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between text-[11px] font-mono text-slate-400 z-10">
+                <div class="flex items-center space-x-4">
+                    <div id="cursorPixelCoords" class="flex items-center gap-1">
+                        <span class="text-slate-500">像素:</span>
+                        <span class="text-slate-300">X: 0, Y: 0</span>
+                    </div>
+                    <div class="w-px h-3 bg-slate-800"></div>
+                    <div id="cursorNormCoords" class="flex items-center gap-1">
+                        <span class="text-slate-500">[0, 1000] 坐标:</span>
+                        <span class="text-emerald-400">[y: 0, x: 0]</span>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <div id="imageResolutionInfo" class="text-slate-400">
+                        分辨率: -
+                    </div>
+                </div>
+            </footer>
+        </main>
+
+    </div>
+
+    <!-- Help Modal Dialog -->
+    <div id="helpModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <span class="text-emerald-400">🎯</span>
+                    REC BBox Visualizer 使用指南
+                </h3>
+                <button id="closeHelpBtn" class="text-slate-400 hover:text-slate-200 p-1 rounded-md hover:bg-slate-800">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="text-xs text-slate-300 space-y-3 leading-relaxed">
+                <div>
+                    <h4 class="font-semibold text-emerald-400 mb-1">1. 什么是 REC (Referring Expression Comprehension)？</h4>
+                    <p class="text-slate-400">REC 即指代目标理解，是大模型（如 Qwen2-VL, Florence-2, InternVL 等）通过自然语言指示在图像中精确定位特定目标物体的任务，输出通常为基于 [0, 1000] 归一化的 Bounding Box 坐标。</p>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-emerald-400 mb-1">2. 支持的坐标顺序</h4>
+                    <p class="text-slate-400">系统默认采用 <code class="text-emerald-300 font-mono">[ymin, xmin, ymax, xmax]</code>（Qwen-VL 及 Florence-2 标准格式）。如果您使用的是标准检测格式，可在设置中切换为 <code class="text-emerald-300 font-mono">[xmin, ymin, xmax, ymax]</code> 或 COCO 宽高格式。</p>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-emerald-400 mb-1">3. 图片输入方式</h4>
+                    <ul class="list-disc list-inside text-slate-400 space-y-1 pl-1">
+                        <li><strong>本地文件</strong>：点击选择或拖放图片。</li>
+                        <li><strong>直接粘贴</strong>：在网页任意位置按下 <kbd class="bg-slate-800 px-1 py-0.5 rounded text-slate-300 font-mono">Ctrl + V</kbd> 即可立即粘贴剪贴板截图。</li>
+                        <li><strong>在线网页 / 链接</strong>：可输入图片直链，或输入普通网页 URL 自动抓取网页快照（便于测试 Web GUI Agent 定位能力）。</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-emerald-400 mb-1">4. 手动绘制标注</h4>
+                    <p class="text-slate-400">切换至右上角的“手动绘制框”模式，即可在图片上拖拽拉框，系统会自动生成对应的 [0, 1000] 归一化坐标与标签，方便构建 REC Prompt 与评测数据。</p>
+                </div>
+            </div>
+            <div class="pt-3 border-t border-slate-800 flex justify-end">
+                <button id="helpConfirmBtn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium transition">
+                    我知道了
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-12 right-6 bg-slate-800/95 border border-slate-700 text-slate-200 px-4 py-2.5 rounded-xl shadow-2xl text-xs flex items-center space-x-2 transition-all duration-300 transform translate-y-8 opacity-0 pointer-events-none z-50 backdrop-blur">
+        <svg id="toastIcon" class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        <span id="toastMsg">通知内容</span>
+    </div>
+
+    <!-- Logic Script -->
+    <script>
+        // Preset Palette Colors
+        const COLOR_PALETTE = [
+            '#ef4444', // Red
+            '#3b82f6', // Blue
+            '#10b981', // Emerald
+            '#f59e0b', // Amber
+            '#8b5cf6', // Violet
+            '#06b6d4', // Cyan
+            '#ec4899', // Pink
+            '#14b8a6', // Teal
+            '#f97316', // Orange
+            '#6366f1'  // Indigo
+        ];
+
+        // State Store
+        const state = {
+            image: null,
+            imageWidth: 0,
+            imageHeight: 0,
+            imageSourceType: 'none', // 'local', 'url', 'web'
+            imageName: '',
+            
+            // Boxes: Array of { id, label, normCoords: [4], pixelCoords: { x, y, w, h }, color, visible, rawMatch }
+            boxes: [],
+            selectedBoxId: null,
+            hoveredBoxId: null,
+            
+            // Viewport Transforms
+            scale: 1,
+            panX: 0,
+            panY: 0,
+            isPanning: false,
+            panStartX: 0,
+            panStartY: 0,
+
+            // Modes: 'pan' | 'draw'
+            mode: 'pan',
+            isDrawing: false,
+            drawStart: null,
+            drawCurrent: null,
+
+            // Config
+            coordOrder: 'ymin_xmin_ymax_xmax',
+            coordScale: 1000, // 1000, 1, or 'pixel'
+            lineWidth: 2.5,
+            fillOpacity: 0.15,
+            showLabels: true,
+            showCoords: true
+        };
+
+        // DOM Elements
+        const viewportContainer = document.getElementById('viewportContainer');
+        const mainCanvas = document.getElementById('mainCanvas');
+        const ctx = mainCanvas.getContext('2d');
+        const emptyPrompt = document.getElementById('emptyPrompt');
+        const fileInput = document.getElementById('fileInput');
+        const dropzone = document.getElementById('dropzone');
+        const urlInput = document.getElementById('urlInput');
+        const loadImgUrlBtn = document.getElementById('loadImgUrlBtn');
+        const loadWebSnapBtn = document.getElementById('loadWebSnapBtn');
+        const modelOutputInput = document.getElementById('modelOutputInput');
+        const manualParseBtn = document.getElementById('manualParseBtn');
+        const clearInputBtn = document.getElementById('clearInputBtn');
+        const coordOrderSelect = document.getElementById('coordOrderSelect');
+        const coordScaleSelect = document.getElementById('coordScaleSelect');
+        const targetListContainer = document.getElementById('targetListContainer');
+        const targetCountBadge = document.getElementById('targetCountBadge');
+        const toggleAllVisibilityBtn = document.getElementById('toggleAllVisibilityBtn');
+        const clearBoxesBtn = document.getElementById('clearBoxesBtn');
+        const lineWidthInput = document.getElementById('lineWidthInput');
+        const lineWidthVal = document.getElementById('lineWidthVal');
+        const fillOpacityInput = document.getElementById('fillOpacityInput');
+        const fillOpacityVal = document.getElementById('fillOpacityVal');
+        const showLabelCheckbox = document.getElementById('showLabelCheckbox');
+        const showCoordsCheckbox = document.getElementById('showCoordsCheckbox');
+        const imageMetaBadge = document.getElementById('imageMetaBadge');
+        const imageResolutionInfo = document.getElementById('imageResolutionInfo');
+        const cursorPixelCoords = document.getElementById('cursorPixelCoords');
+        const cursorNormCoords = document.getElementById('cursorNormCoords');
+        const zoomLevelBadge = document.getElementById('zoomLevelBadge');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const resetZoomBtn = document.getElementById('resetZoomBtn');
+        const fitScreenBtn = document.getElementById('fitScreenBtn');
+        const modePanBtn = document.getElementById('modePanBtn');
+        const modeDrawBtn = document.getElementById('modeDrawBtn');
+        const canvasTooltip = document.getElementById('canvasTooltip');
+        const tooltipTitle = document.getElementById('tooltipTitle');
+        const tooltipNormCoords = document.getElementById('tooltipNormCoords');
+        const tooltipPixelCoords = document.getElementById('tooltipPixelCoords');
+        const downloadImageBtn = document.getElementById('downloadImageBtn');
+        const copyImageBtn = document.getElementById('copyImageBtn');
+        const exportJsonBtn = document.getElementById('exportJsonBtn');
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toastMsg');
+        const toastIcon = document.getElementById('toastIcon');
+
+        // Tabs
+        const tabLocalBtn = document.getElementById('tabLocalBtn');
+        const tabUrlBtn = document.getElementById('tabUrlBtn');
+        const panelLocal = document.getElementById('panelLocal');
+        const panelUrl = document.getElementById('panelUrl');
+
+        // Help Modal
+        const helpBtn = document.getElementById('helpBtn');
+        const helpModal = document.getElementById('helpModal');
+        const closeHelpBtn = document.getElementById('closeHelpBtn');
+        const helpConfirmBtn = document.getElementById('helpConfirmBtn');
+
+        // Toast Helper
+        function showToast(message, type = 'success') {
+            toastMsg.textContent = message;
+            if (type === 'error') {
+                toastIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+                toastIcon.className = 'w-4 h-4 text-rose-400';
+            } else {
+                toastIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>';
+                toastIcon.className = 'w-4 h-4 text-emerald-400';
+            }
+            toast.classList.remove('translate-y-8', 'opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('translate-y-8', 'opacity-0', 'pointer-events-none');
+            }, 3000);
+        }
+
+        // Initialize Tab Switching
+        tabLocalBtn.addEventListener('click', () => {
+            tabLocalBtn.className = 'py-1.5 px-3 rounded-md font-medium text-center transition-all bg-emerald-600 text-white shadow-sm flex items-center justify-center gap-1.5';
+            tabUrlBtn.className = 'py-1.5 px-3 rounded-md font-medium text-center transition-all text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5';
+            panelLocal.classList.remove('hidden');
+            panelUrl.classList.add('hidden');
+        });
+
+        tabUrlBtn.addEventListener('click', () => {
+            tabUrlBtn.className = 'py-1.5 px-3 rounded-md font-medium text-center transition-all bg-emerald-600 text-white shadow-sm flex items-center justify-center gap-1.5';
+            tabLocalBtn.className = 'py-1.5 px-3 rounded-md font-medium text-center transition-all text-slate-400 hover:text-slate-200 flex items-center justify-center gap-1.5';
+            panelUrl.classList.remove('hidden');
+            panelLocal.classList.add('hidden');
+        });
+
+        // Help Modal Events
+        helpBtn.addEventListener('click', () => helpModal.classList.remove('hidden'));
+        closeHelpBtn.addEventListener('click', () => helpModal.classList.add('hidden'));
+        helpConfirmBtn.addEventListener('click', () => helpModal.classList.add('hidden'));
+        helpModal.addEventListener('click', (e) => {
+            if (e.target === helpModal) helpModal.classList.add('hidden');
+        });
+
+        // Image Loading Logic
+        function loadImageFromSource(src, name = 'image', sourceType = 'local') {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                state.image = img;
+                state.imageWidth = img.naturalWidth || img.width;
+                state.imageHeight = img.naturalHeight || img.height;
+                state.imageName = name;
+                state.imageSourceType = sourceType;
+
+                imageMetaBadge.textContent = `${state.imageWidth} × ${state.imageHeight} px`;
+                imageResolutionInfo.textContent = `分辨率: ${state.imageWidth} × ${state.imageHeight} px`;
+
+                emptyPrompt.classList.add('hidden');
+                mainCanvas.classList.remove('opacity-0');
+
+                // Adjust viewport to fit once DOM layout is updated
+                requestAnimationFrame(() => {
+                    fitCanvasToScreen();
+                    parseModelResponse();
+                });
+                showToast(`图片加载成功 (${state.imageWidth}×${state.imageHeight})`);
+            };
+
+            img.onerror = () => {
+                // If direct URL failed, attempt proxy fallback if it was a web url
+                if (src.startsWith('http') && !src.includes('weserv.nl')) {
+                    const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(src)}`;
+                    const fallbackImg = new Image();
+                    fallbackImg.crossOrigin = 'anonymous';
+                    fallbackImg.onload = () => {
+                        state.image = fallbackImg;
+                        state.imageWidth = fallbackImg.naturalWidth || fallbackImg.width;
+                        state.imageHeight = fallbackImg.naturalHeight || fallbackImg.height;
+                        state.imageName = name;
+                        state.imageSourceType = sourceType;
+
+                        imageMetaBadge.textContent = `${state.imageWidth} × ${state.imageHeight} px`;
+                        imageResolutionInfo.textContent = `分辨率: ${state.imageWidth} × ${state.imageHeight} px`;
+
+                        emptyPrompt.classList.add('hidden');
+                        mainCanvas.classList.remove('opacity-0');
+                        fitCanvasToScreen();
+                        parseModelResponse();
+                        showToast(`已通过镜像加速加载图片 (${state.imageWidth}×${state.imageHeight})`);
+                    };
+                    fallbackImg.onerror = () => {
+                        showToast('无法加载指定的图片或网页快照，请检查链接有效性', 'error');
+                    };
+                    fallbackImg.src = proxyUrl;
+                } else {
+                    showToast('图片加载失败，请重试', 'error');
+                }
+            };
+
+            img.src = src;
+        }
+
+        // File Input & Drag and Drop
+        dropzone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    loadImageFromSource(event.target.result, file.name, 'local');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Drag & Drop
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('drag-over');
+        });
+        window.addEventListener('dragleave', (e) => {
+            if (e.relatedTarget === null) dropzone.classList.remove('drag-over');
+        });
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('drag-over');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    loadImageFromSource(event.target.result, file.name, 'local');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Global Paste Listener (Ctrl+V / Cmd+V)
+        window.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const blob = items[i].getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        loadImageFromSource(event.target.result, 'clipboard_image.png', 'local');
+                        showToast('已从剪贴板粘贴并加载图片');
+                    };
+                    reader.readAsDataURL(blob);
+                    break;
+                }
+            }
+        });
+
+        // Online Image URL & Web Snapshot Loading
+        loadImgUrlBtn.addEventListener('click', () => {
+            const url = urlInput.value.trim();
+            if (!url) {
+                showToast('请输入有效的图片链接', 'error');
+                return;
+            }
+            showToast('正在加载远程图片...');
+            loadImageFromSource(url, 'online_image', 'url');
+        });
+
+        loadWebSnapBtn.addEventListener('click', () => {
+            let url = urlInput.value.trim();
+            if (!url) {
+                showToast('请输入有效的在线网页链接 (如 https://github.com)', 'error');
+                return;
+            }
+            if (!/^https?:\/\//i.test(url)) {
+                url = 'https://' + url;
+                urlInput.value = url;
+            }
+            showToast('正在抓取在线网页全貌快照...');
+            // Free and stable snapshot services: WordPress mshots or thum.io
+            const snapshotUrl = `https://s0.wp.com/mshots/v1/${encodeURIComponent(url)}?w=1280`;
+            loadImageFromSource(snapshotUrl, `snapshot_${new URL(url).hostname}`, 'web');
+        });
+
+        urlInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const val = urlInput.value.trim();
+                if (/\.(png|jpe?g|webp|gif|svg|bmp)(\?.*)?$/i.test(val)) {
+                    loadImgUrlBtn.click();
+                } else {
+                    loadWebSnapBtn.click();
+                }
+            }
+        });
+
+        // Coordinate Normalization Converter
+        // Default scale: 1000. Converts [0, 1000] to absolute image pixels {x, y, w, h}
+        function convertCoordsToPixel(coords, order, scaleType, imgW, imgH) {
+            let scaleVal = (scaleType === 1000) ? 1000 : (scaleType === 1 ? 1 : null);
+            let [c1, c2, c3, c4] = coords.map(Number);
+
+            // If coordinates are in scaleType 1000, normalize by 1000
+            let normX1, normY1, normX2, normY2;
+
+            if (scaleVal) {
+                c1 /= scaleVal;
+                c2 /= scaleVal;
+                c3 /= scaleVal;
+                c4 /= scaleVal;
+            } else {
+                // Pixel scale: already in pixels, normalize to [0, 1] for unified calculation
+                c1 /= imgW;
+                c2 /= imgH;
+                c3 /= imgW;
+                c4 /= imgH;
+            }
+
+            let left, top, right, bottom;
+
+            switch (order) {
+                case 'ymin_xmin_ymax_xmax':
+                    // [ymin, xmin, ymax, xmax] - Qwen-VL, Florence-2
+                    top = c1 * imgH;
+                    left = c2 * imgW;
+                    bottom = c3 * imgH;
+                    right = c4 * imgW;
+                    break;
+                case 'xmin_ymin_xmax_ymax':
+                    // [xmin, ymin, xmax, ymax] - VOC
+                    left = c1 * imgW;
+                    top = c2 * imgH;
+                    right = c3 * imgW;
+                    bottom = c4 * imgH;
+                    break;
+                case 'xmin_ymin_w_h':
+                    // [xmin, ymin, w, h] - COCO
+                    left = c1 * imgW;
+                    top = c2 * imgH;
+                    right = left + (c3 * imgW);
+                    bottom = top + (c4 * imgH);
+                    break;
+                case 'cx_cy_w_h':
+                    // Center format
+                    const cx = c1 * imgW;
+                    const cy = c2 * imgH;
+                    const halfW = (c3 * imgW) / 2;
+                    const halfH = (c4 * imgH) / 2;
+                    left = cx - halfW;
+                    top = cy - halfH;
+                    right = cx + halfW;
+                    bottom = cy + halfH;
+                    break;
+                default:
+                    top = c1 * imgH;
+                    left = c2 * imgW;
+                    bottom = c3 * imgH;
+                    right = c4 * imgW;
+            }
+
+            // Ensure min <= max
+            const x = Math.min(left, right);
+            const y = Math.min(top, bottom);
+            const w = Math.max(Math.abs(right - left), 1);
+            const h = Math.max(Math.abs(bottom - top), 1);
+
+            return { x, y, w, h };
+        }
+
+        // BBox Parser supporting multiple REC models
+        function parseModelResponse() {
+            const rawText = modelOutputInput.value.trim();
+            if (!rawText) {
+                state.boxes = [];
+                renderTargetList();
+                renderCanvas();
+                return;
+            }
+
+            const imgW = state.imageWidth || 1000;
+            const imgH = state.imageHeight || 1000;
+            const order = state.coordOrder;
+            const scale = state.coordScale;
+
+            const parsedBoxes = [];
+            let boxIndex = 1;
+
+            // Strategy 1: Florence-2 format: (<phrase>...</phrase>)? <loc_123><loc_456><loc_789><loc_999>
+            const florenceRegex = /(?:<phrase>(.*?)<\/phrase>)?\s*<loc_(\d+)><loc_(\d+)><loc_(\d+)><loc_(\d+)>/g;
+            let m;
+            let foundFlorence = false;
+            while ((m = florenceRegex.exec(rawText)) !== null) {
+                foundFlorence = true;
+                const label = m[1] ? m[1].trim() : `Target #${boxIndex}`;
+                const rawCoords = [m[2], m[3], m[4], m[5]].map(Number);
+                const color = COLOR_PALETTE[(boxIndex - 1) % COLOR_PALETTE.length];
+                const pixelCoords = convertCoordsToPixel(rawCoords, order, scale, imgW, imgH);
+                parsedBoxes.push({
+                    id: 'box_' + Date.now() + '_' + boxIndex,
+                    label,
+                    normCoords: rawCoords,
+                    pixelCoords,
+                    color,
+                    visible: true
+                });
+                boxIndex++;
+            }
+
+            // Strategy 2: Qwen-VL tag format: <ref>...</ref><box>[123, 456, 789, 999]</box>
+            if (!foundFlorence) {
+                const qwenTagRegex = /(?:<ref>(.*?)<\/ref>)?\s*<box>\s*\[?(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)\]?\s*<\/box>/g;
+                let foundQwen = false;
+                while ((m = qwenTagRegex.exec(rawText)) !== null) {
+                    foundQwen = true;
+                    const label = m[1] ? m[1].trim() : `Target #${boxIndex}`;
+                    const rawCoords = [m[2], m[3], m[4], m[5]].map(Number);
+                    const color = COLOR_PALETTE[(boxIndex - 1) % COLOR_PALETTE.length];
+                    const pixelCoords = convertCoordsToPixel(rawCoords, order, scale, imgW, imgH);
+                    parsedBoxes.push({
+                        id: 'box_' + Date.now() + '_' + boxIndex,
+                        label,
+                        normCoords: rawCoords,
+                        pixelCoords,
+                        color,
+                        visible: true
+                    });
+                    boxIndex++;
+                }
+
+                // Strategy 3: JSON Objects (e.g. {"box_2d": [ymin, xmin, ymax, xmax], "label": "..."} or {"bbox": ...})
+                if (!foundQwen) {
+                    // Try parsing whole text as JSON
+                    let parsedJson = null;
+                    try {
+                        // Extract JSON codeblock if any
+                        let jsonCandidate = rawText;
+                        const codeBlockMatch = /```(?:json)?\s*([\s\S]*?)```/.exec(rawText);
+                        if (codeBlockMatch) {
+                            jsonCandidate = codeBlockMatch[1];
+                        }
+                        parsedJson = JSON.parse(jsonCandidate);
+                    } catch (e) {
+                        // Not a single valid JSON block, will try regex-based JSON extraction
+                    }
+
+                    if (parsedJson) {
+                        const items = Array.isArray(parsedJson) ? parsedJson : (parsedJson.boxes || parsedJson.predictions || [parsedJson]);
+                        items.forEach(item => {
+                            const rawCoords = item.box_2d || item.bbox || item.box || item.b_box || item.coordinates;
+                            if (Array.isArray(rawCoords) && rawCoords.length === 4) {
+                                const label = item.label || item.text || item.name || item.phrase || `Target #${boxIndex}`;
+                                const color = COLOR_PALETTE[(boxIndex - 1) % COLOR_PALETTE.length];
+                                const pixelCoords = convertCoordsToPixel(rawCoords, order, scale, imgW, imgH);
+                                parsedBoxes.push({
+                                    id: 'box_' + Date.now() + '_' + boxIndex,
+                                    label,
+                                    normCoords: rawCoords,
+                                    pixelCoords,
+                                    color,
+                                    visible: true
+                                });
+                                boxIndex++;
+                            }
+                        });
+                    }
+
+                    // Strategy 4: Line-by-line or regex fallback for general bracketed/parenthesized quadruplets
+                    if (parsedBoxes.length === 0) {
+                        // Pattern: optional label then [num, num, num, num] or (num, num, num, num)
+                        const generalRegex = /(?:([a-zA-Z0-9_\u4e00-\u9fa5\s]+)[:=：\-\t]\s*)?[\[\(]?\s*(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)\s*[\]\)]?/g;
+                        while ((m = generalRegex.exec(rawText)) !== null) {
+                            const candidateLabel = m[1] ? m[1].trim() : '';
+                            const cleanLabel = candidateLabel.length > 0 && candidateLabel.length < 30 ? candidateLabel : `Target #${boxIndex}`;
+                            const rawCoords = [m[2], m[3], m[4], m[5]].map(Number);
+                            const color = COLOR_PALETTE[(boxIndex - 1) % COLOR_PALETTE.length];
+                            const pixelCoords = convertCoordsToPixel(rawCoords, order, scale, imgW, imgH);
+                            parsedBoxes.push({
+                                id: 'box_' + Date.now() + '_' + boxIndex,
+                                label: cleanLabel,
+                                normCoords: rawCoords,
+                                pixelCoords,
+                                color,
+                                visible: true
+                            });
+                            boxIndex++;
+                        }
+                    }
+                }
+            }
+
+            state.boxes = parsedBoxes;
+            renderTargetList();
+            renderCanvas();
+        }
+
+        // Render Sidebar Target List
+        function renderTargetList() {
+            targetCountBadge.textContent = state.boxes.length;
+            if (state.boxes.length === 0) {
+                targetListContainer.innerHTML = `
+                    <div class="text-center py-6 text-slate-500 text-xs italic">
+                        暂无解析目标，请在上方输入大模型回复
+                    </div>`;
+                return;
+            }
+
+            let html = '';
+            state.boxes.forEach((box, idx) => {
+                const normStr = `[${box.normCoords.join(', ')}]`;
+                const isSelected = state.selectedBoxId === box.id || state.hoveredBoxId === box.id;
+                html += `
+                    <div class="target-item p-2 rounded-lg border transition-all flex items-center justify-between gap-2 text-xs ${box.visible ? 'bg-slate-950/60' : 'opacity-40 bg-slate-950/20'} ${isSelected ? 'border-emerald-500 ring-1 ring-emerald-500/40' : 'border-slate-800 hover:border-slate-700'}"
+                         data-id="${box.id}">
+                        <div class="flex items-center space-x-2 min-w-0 flex-1">
+                            <span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${box.color};"></span>
+                            <div class="truncate">
+                                <div class="font-medium text-slate-200 truncate flex items-center gap-1">
+                                    <span class="text-[10px] text-slate-500">#${idx + 1}</span>
+                                    <span>${escapeHtml(box.label)}</span>
+                                </div>
+                                <div class="text-[10px] font-mono text-slate-400">
+                                    ${normStr}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-1 shrink-0">
+                            <button class="toggle-vis-btn p-1 text-slate-400 hover:text-slate-200 rounded hover:bg-slate-800 transition" title="${box.visible ? '隐藏' : '显示'}" data-id="${box.id}">
+                                ${box.visible ? `
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                    </svg>
+                                ` : `
+                                    <svg class="w-3.5 h-3.5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"></path>
+                                    </svg>
+                                `}
+                            </button>
+                            <button class="delete-box-btn p-1 text-slate-500 hover:text-rose-400 rounded hover:bg-slate-800 transition" title="删除" data-id="${box.id}">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>`;
+            });
+            targetListContainer.innerHTML = html;
+
+            // Attach interactions
+            targetListContainer.querySelectorAll('.target-item').forEach(el => {
+                const id = el.getAttribute('data-id');
+                el.addEventListener('mouseenter', () => {
+                    state.hoveredBoxId = id;
+                    renderCanvas();
+                });
+                el.addEventListener('mouseleave', () => {
+                    state.hoveredBoxId = null;
+                    renderCanvas();
+                });
+                el.addEventListener('click', (e) => {
+                    if (e.target.closest('button')) return;
+                    state.selectedBoxId = id;
+                    renderTargetList();
+                    renderCanvas();
+                });
+            });
+
+            targetListContainer.querySelectorAll('.toggle-vis-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const id = btn.getAttribute('data-id');
+                    const b = state.boxes.find(item => item.id === id);
+                    if (b) {
+                        b.visible = !b.visible;
+                        renderTargetList();
+                        renderCanvas();
+                    }
+                });
+            });
+
+            targetListContainer.querySelectorAll('.delete-box-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const id = btn.getAttribute('data-id');
+                    state.boxes = state.boxes.filter(item => item.id !== id);
+                    if (state.selectedBoxId === id) state.selectedBoxId = null;
+                    renderTargetList();
+                    renderCanvas();
+                });
+            });
+        }
+
+        // Helper: HTML Escaping
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, function (m) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                }[m];
+            });
+        }
+
+        // Canvas Rendering Engine
+        function renderCanvas() {
+            if (!state.image) return;
+
+            const dpr = window.devicePixelRatio || 1;
+            const containerW = viewportContainer.clientWidth;
+            const containerH = viewportContainer.clientHeight;
+            if (containerW === 0 || containerH === 0) return;
+
+            mainCanvas.width = Math.round(containerW * dpr);
+            mainCanvas.height = Math.round(containerH * dpr);
+
+            ctx.save();
+            ctx.scale(dpr, dpr);
+
+            // Apply Pan & Zoom Transform
+            ctx.translate(state.panX, state.panY);
+            ctx.scale(state.scale, state.scale);
+
+            // Draw Background Image
+            ctx.drawImage(state.image, 0, 0, state.imageWidth, state.imageHeight);
+
+            // Draw BBoxes
+            state.boxes.forEach(box => {
+                if (!box.visible) return;
+
+                const { x, y, w, h } = box.pixelCoords;
+                const isHovered = (state.hoveredBoxId === box.id);
+                const isSelected = (state.selectedBoxId === box.id);
+
+                // Semi-transparent Fill
+                ctx.fillStyle = hexToRgba(box.color, isHovered ? Math.min(state.fillOpacity + 0.15, 0.7) : state.fillOpacity);
+                ctx.fillRect(x, y, w, h);
+
+                // Border Stroke
+                ctx.lineWidth = (state.lineWidth / state.scale) * (isHovered || isSelected ? 1.5 : 1.0);
+                ctx.strokeStyle = box.color;
+                ctx.strokeRect(x, y, w, h);
+
+                // Corner Handles
+                const handleSize = 6 / state.scale;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
+                ctx.fillRect(x + w - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
+                ctx.fillRect(x - handleSize / 2, y + h - handleSize / 2, handleSize, handleSize);
+                ctx.fillRect(x + w - handleSize / 2, y + h - handleSize / 2, handleSize, handleSize);
+
+                // Draw Label Pill
+                if (state.showLabels) {
+                    const labelText = box.label + (state.showCoords ? ` [${box.normCoords.join(', ')}]` : '');
+                    const fontSize = Math.max(12 / state.scale, 10);
+                    ctx.font = `600 ${fontSize}px ui-sans-serif, system-ui, -apple-system, sans-serif`;
+                    const textMetrics = ctx.measureText(labelText);
+                    const padX = 6 / state.scale;
+                    const padY = 3 / state.scale;
+                    const pillW = textMetrics.width + padX * 2;
+                    const pillH = fontSize + padY * 2;
+
+                    let pillX = x;
+                    let pillY = y - pillH;
+                    if (pillY < 0) pillY = y; // flip inside if touching top border
+
+                    // Pill Background
+                    ctx.fillStyle = box.color;
+                    ctx.beginPath();
+                    if (ctx.roundRect) {
+                        ctx.roundRect(pillX, pillY, pillW, pillH, 3 / state.scale);
+                    } else {
+                        ctx.rect(pillX, pillY, pillW, pillH);
+                    }
+                    ctx.fill();
+
+                    // Pill Text
+                    ctx.fillStyle = '#ffffff';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(labelText, pillX + padX, pillY + pillH / 2);
+                }
+            });
+
+            // If user is currently drawing a new box
+            if (state.mode === 'draw' && state.isDrawing && state.drawStart && state.drawCurrent) {
+                const x = Math.min(state.drawStart.x, state.drawCurrent.x);
+                const y = Math.min(state.drawStart.y, state.drawCurrent.y);
+                const w = Math.abs(state.drawCurrent.x - state.drawStart.x);
+                const h = Math.abs(state.drawCurrent.y - state.drawStart.y);
+
+                ctx.fillStyle = 'rgba(34, 197, 94, 0.2)';
+                ctx.fillRect(x, y, w, h);
+                ctx.lineWidth = 2 / state.scale;
+                ctx.setLineDash([4 / state.scale, 4 / state.scale]);
+                ctx.strokeStyle = '#22c55e';
+                ctx.strokeRect(x, y, w, h);
+                ctx.setLineDash([]);
+            }
+
+            ctx.restore();
+        }
+
+        // Color Hex to RGBA Helper
+        function hexToRgba(hex, alpha) {
+            let c = hex.replace('#', '');
+            if (c.length === 3) {
+                c = c.split('').map(x => x + x).join('');
+            }
+            const num = parseInt(c, 16);
+            return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
+        }
+
+        // Canvas Viewport Transforms
+        function fitCanvasToScreen() {
+            if (!state.image) return;
+            const containerW = viewportContainer.clientWidth;
+            const containerH = viewportContainer.clientHeight;
+            const padding = 40;
+
+            const scaleX = (containerW - padding * 2) / state.imageWidth;
+            const scaleY = (containerH - padding * 2) / state.imageHeight;
+            state.scale = Math.min(scaleX, scaleY, 1.0); // Don't upscale past 100% on fit
+            if (state.scale <= 0) state.scale = 1;
+
+            state.panX = (containerW - state.imageWidth * state.scale) / 2;
+            state.panY = (containerH - state.imageHeight * state.scale) / 2;
+
+            updateZoomDisplay();
+            renderCanvas();
+        }
+
+        function updateZoomDisplay() {
+            zoomLevelBadge.textContent = `${Math.round(state.scale * 100)}%`;
+        }
+
+        // Mouse Events on Viewport
+        viewportContainer.addEventListener('wheel', (e) => {
+            if (!state.image) return;
+            e.preventDefault();
+
+            const rect = viewportContainer.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+            const newScale = Math.max(0.1, Math.min(10.0, state.scale * zoomFactor));
+
+            // Zoom centered on cursor position
+            state.panX = mouseX - (mouseX - state.panX) * (newScale / state.scale);
+            state.panY = mouseY - (mouseY - state.panY) * (newScale / state.scale);
+            state.scale = newScale;
+
+            updateZoomDisplay();
+            renderCanvas();
+        }, { passive: false });
+
+        viewportContainer.addEventListener('mousedown', (e) => {
+            if (!state.image) return;
+
+            const rect = viewportContainer.getBoundingClientRect();
+            const clientX = e.clientX - rect.left;
+            const clientY = e.clientY - rect.top;
+
+            if (state.mode === 'pan' || e.button === 1 || e.spaceKey) {
+                state.isPanning = true;
+                state.panStartX = clientX - state.panX;
+                state.panStartY = clientY - state.panY;
+            } else if (state.mode === 'draw' && e.button === 0) {
+                state.isDrawing = true;
+                const imgCoords = screenToImageCoords(clientX, clientY);
+                state.drawStart = imgCoords;
+                state.drawCurrent = imgCoords;
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!state.image) return;
+
+            const rect = viewportContainer.getBoundingClientRect();
+            const clientX = e.clientX - rect.left;
+            const clientY = e.clientY - rect.top;
+
+            // Handle Panning
+            if (state.isPanning) {
+                state.panX = clientX - state.panStartX;
+                state.panY = clientY - state.panStartY;
+                renderCanvas();
+                return;
+            }
+
+            // Handle Drawing
+            if (state.isDrawing) {
+                state.drawCurrent = screenToImageCoords(clientX, clientY);
+                renderCanvas();
+                return;
+            }
+
+            // Update Cursor Coordinates status bar
+            const imgCoords = screenToImageCoords(clientX, clientY);
+            const clampedX = Math.round(Math.max(0, Math.min(state.imageWidth, imgCoords.x)));
+            const clampedY = Math.round(Math.max(0, Math.min(state.imageHeight, imgCoords.y)));
+            
+            cursorPixelCoords.innerHTML = `<span class="text-slate-500">像素:</span> <span class="text-slate-300">X: ${clampedX}, Y: ${clampedY}</span>`;
+            
+            // Normalized [0, 1000]
+            const normX = Math.round((clampedX / state.imageWidth) * 1000);
+            const normY = Math.round((clampedY / state.imageHeight) * 1000);
+            cursorNormCoords.innerHTML = `<span class="text-slate-500">[0, 1000] 坐标:</span> <span class="text-emerald-400">[y: ${normY}, x: ${normX}]</span>`;
+
+            // Hover Detection on BBoxes
+            if (state.mode === 'pan') {
+                let hitBox = null;
+                for (let i = state.boxes.length - 1; i >= 0; i--) {
+                    const b = state.boxes[i];
+                    if (!b.visible) continue;
+                    const { x, y, w, h } = b.pixelCoords;
+                    if (imgCoords.x >= x && imgCoords.x <= x + w && imgCoords.y >= y && imgCoords.y <= y + h) {
+                        hitBox = b;
+                        break;
+                    }
+                }
+
+                if (hitBox) {
+                    state.hoveredBoxId = hitBox.id;
+                    canvasTooltip.classList.remove('hidden');
+                    canvasTooltip.style.left = (clientX + 15) + 'px';
+                    canvasTooltip.style.top = (clientY + 15) + 'px';
+                    tooltipTitle.textContent = hitBox.label;
+                    tooltipNormCoords.textContent = `[0, 1000]: [${hitBox.normCoords.join(', ')}]`;
+                    tooltipPixelCoords.textContent = `像素: (${Math.round(hitBox.pixelCoords.x)}, ${Math.round(hitBox.pixelCoords.y)}, ${Math.round(hitBox.pixelCoords.w)}, ${Math.round(hitBox.pixelCoords.h)})`;
+                } else {
+                    state.hoveredBoxId = null;
+                    canvasTooltip.classList.add('hidden');
+                }
+                renderCanvas();
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (state.isPanning) {
+                state.isPanning = false;
+            }
+            if (state.isDrawing) {
+                state.isDrawing = false;
+                if (state.drawStart && state.drawCurrent) {
+                    const x1 = Math.min(state.drawStart.x, state.drawCurrent.x);
+                    const y1 = Math.min(state.drawStart.y, state.drawCurrent.y);
+                    const x2 = Math.max(state.drawStart.x, state.drawCurrent.x);
+                    const y2 = Math.max(state.drawStart.y, state.drawCurrent.y);
+
+                    const w = x2 - x1;
+                    const h = y2 - y1;
+
+                    // If box is large enough (> 5px)
+                    if (w > 5 && h > 5) {
+                        const normY1 = Math.round((y1 / state.imageHeight) * 1000);
+                        const normX1 = Math.round((x1 / state.imageWidth) * 1000);
+                        const normY2 = Math.round((y2 / state.imageHeight) * 1000);
+                        const normX2 = Math.round((x2 / state.imageWidth) * 1000);
+
+                        let newNormCoords;
+                        if (state.coordOrder === 'ymin_xmin_ymax_xmax') {
+                            newNormCoords = [normY1, normX1, normY2, normX2];
+                        } else if (state.coordOrder === 'xmin_ymin_xmax_ymax') {
+                            newNormCoords = [normX1, normY1, normX2, normY2];
+                        } else {
+                            newNormCoords = [normX1, normY1, Math.round((w / state.imageWidth) * 1000), Math.round((h / state.imageHeight) * 1000)];
+                        }
+
+                        const targetName = prompt('请输入该标注框的目标名称 / 标签 (Label):', `Target #${state.boxes.length + 1}`);
+                        if (targetName !== null) {
+                            const newBox = {
+                                id: 'box_' + Date.now(),
+                                label: targetName.trim() || `Target #${state.boxes.length + 1}`,
+                                normCoords: newNormCoords,
+                                pixelCoords: { x: x1, y: y1, w, h },
+                                color: COLOR_PALETTE[state.boxes.length % COLOR_PALETTE.length],
+                                visible: true
+                            };
+                            state.boxes.push(newBox);
+                            renderTargetList();
+                            renderCanvas();
+                            showToast(`已添加标注: ${newBox.label} [${newNormCoords.join(', ')}]`);
+                        }
+                    }
+                }
+                state.drawStart = null;
+                state.drawCurrent = null;
+                renderCanvas();
+            }
+        });
+
+        function screenToImageCoords(screenX, screenY) {
+            return {
+                x: (screenX - state.panX) / state.scale,
+                y: (screenY - state.panY) / state.scale
+            };
+        }
+
+        // Toolbar Buttons
+        zoomInBtn.addEventListener('click', () => {
+            state.scale = Math.min(10.0, state.scale * 1.25);
+            updateZoomDisplay();
+            renderCanvas();
+        });
+        zoomOutBtn.addEventListener('click', () => {
+            state.scale = Math.max(0.1, state.scale / 1.25);
+            updateZoomDisplay();
+            renderCanvas();
+        });
+        resetZoomBtn.addEventListener('click', () => {
+            state.scale = 1.0;
+            state.panX = (viewportContainer.clientWidth - state.imageWidth) / 2;
+            state.panY = (viewportContainer.clientHeight - state.imageHeight) / 2;
+            updateZoomDisplay();
+            renderCanvas();
+        });
+        fitScreenBtn.addEventListener('click', fitCanvasToScreen);
+
+        modePanBtn.addEventListener('click', () => {
+            state.mode = 'pan';
+            modePanBtn.className = 'px-2.5 py-1 rounded-md font-medium text-white bg-emerald-600 transition flex items-center gap-1';
+            modeDrawBtn.className = 'px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-slate-200 transition flex items-center gap-1';
+            viewportContainer.className = 'flex-1 w-full h-full overflow-hidden checkerboard relative cursor-grab active:cursor-grabbing flex items-center justify-center';
+        });
+
+        modeDrawBtn.addEventListener('click', () => {
+            state.mode = 'draw';
+            modeDrawBtn.className = 'px-2.5 py-1 rounded-md font-medium text-white bg-emerald-600 transition flex items-center gap-1';
+            modePanBtn.className = 'px-2.5 py-1 rounded-md font-medium text-slate-400 hover:text-slate-200 transition flex items-center gap-1';
+            viewportContainer.className = 'flex-1 w-full h-full overflow-hidden checkerboard relative cursor-crosshair flex items-center justify-center';
+        });
+
+        // Config Controls
+        modelOutputInput.addEventListener('input', parseModelResponse);
+        manualParseBtn.addEventListener('click', () => {
+            parseModelResponse();
+            showToast('已重新解析目标');
+        });
+        clearInputBtn.addEventListener('click', () => {
+            modelOutputInput.value = '';
+            parseModelResponse();
+        });
+
+        coordOrderSelect.addEventListener('change', (e) => {
+            state.coordOrder = e.target.value;
+            parseModelResponse();
+        });
+
+        coordScaleSelect.addEventListener('change', (e) => {
+            state.coordScale = e.target.value === 'pixel' ? 'pixel' : Number(e.target.value);
+            parseModelResponse();
+        });
+
+        lineWidthInput.addEventListener('input', (e) => {
+            state.lineWidth = parseFloat(e.target.value);
+            lineWidthVal.textContent = state.lineWidth + ' px';
+            renderCanvas();
+        });
+
+        fillOpacityInput.addEventListener('input', (e) => {
+            state.fillOpacity = parseFloat(e.target.value);
+            fillOpacityVal.textContent = Math.round(state.fillOpacity * 100) + '%';
+            renderCanvas();
+        });
+
+        showLabelCheckbox.addEventListener('change', (e) => {
+            state.showLabels = e.target.checked;
+            renderCanvas();
+        });
+
+        showCoordsCheckbox.addEventListener('change', (e) => {
+            state.showCoords = e.target.checked;
+            renderCanvas();
+        });
+
+        toggleAllVisibilityBtn.addEventListener('click', () => {
+            const hasVisible = state.boxes.some(b => b.visible);
+            state.boxes.forEach(b => b.visible = !hasVisible);
+            toggleAllVisibilityBtn.textContent = hasVisible ? '全部显示' : '全部隐藏';
+            renderTargetList();
+            renderCanvas();
+        });
+
+        clearBoxesBtn.addEventListener('click', () => {
+            state.boxes = [];
+            renderTargetList();
+            renderCanvas();
+        });
+
+        // Export Functionality
+        downloadImageBtn.addEventListener('click', () => {
+            if (!state.image) {
+                showToast('请先加载图片', 'error');
+                return;
+            }
+
+            // Create offscreen canvas with full original resolution
+            const offscreen = document.createElement('canvas');
+            offscreen.width = state.imageWidth;
+            offscreen.height = state.imageHeight;
+            const offCtx = offscreen.getContext('2d');
+
+            // Draw image
+            offCtx.drawImage(state.image, 0, 0);
+
+            // Draw boxes
+            state.boxes.forEach(box => {
+                if (!box.visible) return;
+                const { x, y, w, h } = box.pixelCoords;
+
+                // Fill
+                offCtx.fillStyle = hexToRgba(box.color, state.fillOpacity);
+                offCtx.fillRect(x, y, w, h);
+
+                // Border
+                offCtx.lineWidth = state.lineWidth;
+                offCtx.strokeStyle = box.color;
+                offCtx.strokeRect(x, y, w, h);
+
+                // Label
+                if (state.showLabels) {
+                    const labelText = box.label + (state.showCoords ? ` [${box.normCoords.join(', ')}]` : '');
+                    const fontSize = Math.max(14, Math.round(state.imageHeight * 0.022));
+                    offCtx.font = `600 ${fontSize}px sans-serif`;
+                    const metrics = offCtx.measureText(labelText);
+                    const padX = 8;
+                    const padY = 4;
+                    const pillW = metrics.width + padX * 2;
+                    const pillH = fontSize + padY * 2;
+
+                    let pillX = x;
+                    let pillY = y - pillH;
+                    if (pillY < 0) pillY = y;
+
+                    offCtx.fillStyle = box.color;
+                    offCtx.fillRect(pillX, pillY, pillW, pillH);
+
+                    offCtx.fillStyle = '#ffffff';
+                    offCtx.fillText(labelText, pillX + padX, pillY + fontSize);
+                }
+            });
+
+            try {
+                const link = document.createElement('a');
+                link.download = `rec_annotated_${state.imageName || 'image'}.png`;
+                link.href = offscreen.toDataURL('image/png');
+                link.click();
+                showToast('标注图片已成功导出');
+            } catch (err) {
+                showToast('跨域图片限制导出，请尝试本地上传图片', 'error');
+            }
+        });
+
+        copyImageBtn.addEventListener('click', async () => {
+            if (!state.image) {
+                showToast('请先加载图片', 'error');
+                return;
+            }
+            try {
+                const offscreen = document.createElement('canvas');
+                offscreen.width = state.imageWidth;
+                offscreen.height = state.imageHeight;
+                const offCtx = offscreen.getContext('2d');
+                offCtx.drawImage(state.image, 0, 0);
+
+                state.boxes.forEach(box => {
+                    if (!box.visible) return;
+                    const { x, y, w, h } = box.pixelCoords;
+                    offCtx.fillStyle = hexToRgba(box.color, state.fillOpacity);
+                    offCtx.fillRect(x, y, w, h);
+                    offCtx.lineWidth = state.lineWidth;
+                    offCtx.strokeStyle = box.color;
+                    offCtx.strokeRect(x, y, w, h);
+
+                    if (state.showLabels) {
+                        const labelText = box.label + (state.showCoords ? ` [${box.normCoords.join(', ')}]` : '');
+                        const fontSize = Math.max(14, Math.round(state.imageHeight * 0.022));
+                        offCtx.font = `600 ${fontSize}px sans-serif`;
+                        const metrics = offCtx.measureText(labelText);
+                        const pillW = metrics.width + 16;
+                        const pillH = fontSize + 8;
+                        let pillX = x;
+                        let pillY = y - pillH < 0 ? y : y - pillH;
+
+                        offCtx.fillStyle = box.color;
+                        offCtx.fillRect(pillX, pillY, pillW, pillH);
+                        offCtx.fillStyle = '#ffffff';
+                        offCtx.fillText(labelText, pillX + 8, pillY + fontSize);
+                    }
+                });
+
+                offscreen.toBlob(async (blob) => {
+                    if (!blob) {
+                        showToast('复制图片失败', 'error');
+                        return;
+                    }
+                    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                    showToast('已复制标注图片到剪贴板！');
+                });
+            } catch (e) {
+                showToast('无法复制到剪贴板，请尝试点击“导出图片”', 'error');
+            }
+        });
+
+        exportJsonBtn.addEventListener('click', () => {
+            if (state.boxes.length === 0) {
+                showToast('暂无标注目标可导出', 'error');
+                return;
+            }
+            const exportData = state.boxes.map(b => ({
+                label: b.label,
+                box_2d: b.normCoords,
+                order: state.coordOrder,
+                scale: state.coordScale,
+                pixel: {
+                    x: Math.round(b.pixelCoords.x),
+                    y: Math.round(b.pixelCoords.y),
+                    width: Math.round(b.pixelCoords.w),
+                    height: Math.round(b.pixelCoords.h)
+                }
+            }));
+            const jsonStr = JSON.stringify(exportData, null, 2);
+            navigator.clipboard.writeText(jsonStr).then(() => {
+                showToast('已复制标注 JSON 数据到剪贴板！');
+            }).catch(() => {
+                showToast('复制失败', 'error');
+            });
+        });
+
+
+
+        // Window and container resize handlers to maintain sharp canvas rendering
+        const resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+                    if (state.image) {
+                        renderCanvas();
+                    }
+                }
+            }
+        });
+        resizeObserver.observe(viewportContainer);
+
+        window.addEventListener('resize', () => {
+            if (state.image) {
+                renderCanvas();
+            }
+        });
+    </script>
+</body>
+</html>
