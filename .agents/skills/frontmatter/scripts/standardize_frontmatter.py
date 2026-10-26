@@ -160,70 +160,79 @@ def validate(frontmatter: dict, article_dir: Path) -> list[tuple[str, str]]:
 
     title = frontmatter.get("title")
     if not title:
-        error("title: 缺少或为空（必填，最多 60 字符）")
+        error("title: missing or empty (required, at most 60 characters)")
     elif not isinstance(title, str):
-        error(f"title: 必须是字符串，当前为 {type(title).__name__}")
+        error(f"title: must be a string, got {type(title).__name__}")
     elif len(title) > 60:
-        error(f"title: 超过 60 字符（当前 {len(title)}）")
+        error(f"title: exceeds 60 characters (currently {len(title)})")
 
     description = frontmatter.get("description")
     if not description:
-        error("description: 缺少或为空（必填，10-160 字符）")
+        error("description: missing or empty (required, 10-160 characters)")
     elif not isinstance(description, str):
-        error(f"description: 必须是字符串，当前为 {type(description).__name__}")
+        error(f"description: must be a string, got {type(description).__name__}")
     else:
         if len(description) < 10:
-            error(f"description: 少于 10 字符（当前 {len(description)}）")
+            error(f"description: shorter than 10 characters (currently {len(description)})")
         if len(description) > 160:
-            error(f"description: 超过 160 字符（当前 {len(description)}）")
+            error(f"description: exceeds 160 characters (currently {len(description)})")
 
     publish_date = parse_date_value(frontmatter.get("publishDate"))
     if publish_date is None:
-        error(f"publishDate: 缺失或格式无效，应为 'YYYY-MM-DD' 或 'YYYY-MM-DD HH:MM:SS'（当前 {frontmatter.get('publishDate')!r}）")
+        error(
+            "publishDate: missing or invalid format, expected 'YYYY-MM-DD' or "
+            f"'YYYY-MM-DD HH:MM:SS' (currently {frontmatter.get('publishDate')!r})"
+        )
 
     if "updatedDate" in frontmatter and frontmatter.get("updatedDate") is not None:
         if parse_date_value(frontmatter.get("updatedDate")) is None:
-            error(f"updatedDate: 格式无效（当前 {frontmatter.get('updatedDate')!r}）")
+            error(f"updatedDate: invalid format (currently {frontmatter.get('updatedDate')!r})")
 
     tags = frontmatter.get("tags")
     if tags is not None:
         if not isinstance(tags, list):
-            error(f"tags: 必须是数组（当前为 {type(tags).__name__}）")
+            error(f"tags: must be a list, got {type(tags).__name__}")
         else:
             for tag in tags:
                 if not isinstance(tag, str):
-                    error(f"tags: 元素必须是字符串（当前 {tag!r}）")
+                    error(f"tags: each item must be a string (currently {tag!r})")
                     continue
                 if CJK_RE.search(tag) and ASCII_RE.search(tag):
-                    error(f"tags: '{tag}' 混用中英文，同一标签内不能混用")
+                    error(f"tags: '{tag}' mixes Chinese and English characters, do not mix within one tag")
                 if ASCII_RE.search(tag) and ("-" in tag or tag != tag.lower()):
-                    error(f"tags: '{tag}' 英文标签应全小写且不使用连字符（示例：machine learning）")
+                    error(
+                        f"tags: '{tag}' English tags must be lowercase without hyphens "
+                        "(example: machine learning)"
+                    )
 
     hero = frontmatter.get("heroImage")
     if hero is not None:
         if not isinstance(hero, dict):
-            error(f"heroImage: 必须是对象，不要使用其他格式（当前为 {type(hero).__name__}）")
+            error(f"heroImage: must be a mapping, not another type (got {type(hero).__name__})")
         else:
             src = hero.get("src")
             if not src:
-                error("heroImage.src: 缺失")
+                error("heroImage.src: missing")
             elif isinstance(src, str) and not src.startswith(("http://", "https://", "/")):
                 if not (article_dir / src.lstrip("./")).exists():
-                    warn(f"heroImage.src: '{src}' 在文章目录中不存在")
+                    warn(f"heroImage.src: '{src}' does not exist in the article directory")
             if "color" in hero and not HEX_RE.match(str(hero["color"])):
-                warn(f"heroImage.color: '{hero['color']}' 不是合法的 6 位十六进制颜色码")
+                warn(f"heroImage.color: '{hero['color']}' is not a valid 6-digit hex color")
 
-    for key, expected in (("draft", "布尔值"), ("comment", "布尔值")):
+    for key in ("draft", "comment"):
         if key in frontmatter and not isinstance(frontmatter[key], bool):
-            warn(f"{key}: 应为{expected}（当前为 {frontmatter[key]!r}）")
+            warn(f"{key}: must be a boolean (currently {frontmatter[key]!r})")
 
     language = frontmatter.get("language")
     if language is not None and CJK_RE.search(str(language)):
-        error(f"language: 必须使用英文单词（如 Chinese/English/Japanese），不要使用中文（当前 {language!r}）")
+        error(
+            "language: must be an English word (e.g. Chinese/English/Japanese), "
+            f"not Chinese characters (currently {language!r})"
+        )
 
     ai = frontmatter.get("ai")
     if ai is not None and str(ai).strip().lower() not in AI_VALUES:
-        error(f"ai: 只能是 human / assisted / ai（当前 {ai!r}）")
+        error(f"ai: must be one of human / assisted / ai (currently {ai!r})")
 
     return issues
 
@@ -235,45 +244,48 @@ def build_fixed(frontmatter: dict, article_dir: Path, args) -> tuple[dict, list[
     for required in ("title", "description"):
         value = data.get(required)
         if not value:
-            raise FixError(f"{required} 缺失，无法自动填写，请先补充（--init 时需要 --title/--description）")
+            raise FixError(
+                f"{required} is missing and cannot be generated automatically; "
+                "please provide it first (--title/--description are required with --init)"
+            )
         if not isinstance(value, str):
             data[required] = str(value)
-            changes.append(f"{required}: 转换为字符串")
+            changes.append(f"{required}: converted to string")
 
     if "publishDate" not in data or not data.get("publishDate"):
         data["publishDate"] = args.publish_date or date.today().isoformat()
-        changes.append(f"publishDate: 设置为 {data['publishDate']}")
+        changes.append(f"publishDate: set to {data['publishDate']}")
     else:
         parsed = parse_date_value(data["publishDate"])
         if parsed is None:
-            raise FixError(f"publishDate 格式无效：{data['publishDate']!r}")
+            raise FixError(f"publishDate has an invalid format: {data['publishDate']!r}")
         if parsed != data["publishDate"]:
-            changes.append(f"publishDate: 规范为 {parsed}")
+            changes.append(f"publishDate: normalized to {parsed}")
         data["publishDate"] = parsed
 
     if "updatedDate" in data and data.get("updatedDate") is not None:
         parsed = parse_date_value(data["updatedDate"])
         if parsed is None:
-            raise FixError(f"updatedDate 格式无效：{data['updatedDate']!r}")
+            raise FixError(f"updatedDate has an invalid format: {data['updatedDate']!r}")
         if parsed != data["updatedDate"]:
-            changes.append(f"updatedDate: 规范为 {parsed}")
+            changes.append(f"updatedDate: normalized to {parsed}")
         data["updatedDate"] = parsed
     if args.updated_date:
         if isinstance(args.updated_date, str) and parse_date_value(args.updated_date) is None:
-            raise FixError(f"--updated-date 格式无效：{args.updated_date!r}")
+            raise FixError(f"--updated-date has an invalid format: {args.updated_date!r}")
         today = args.updated_date if isinstance(args.updated_date, str) else date.today().isoformat()
         if data.get("updatedDate") != today:
             data["updatedDate"] = today
-            changes.append(f"updatedDate: 设置为 {today}")
+            changes.append(f"updatedDate: set to {today}")
 
     if "tags" not in data or data.get("tags") is None:
         data["tags"] = list(DEFAULTS["tags"])
-        changes.append("tags: 默认 []")
+        changes.append("tags: defaulted to []")
     else:
         raw = data["tags"] if isinstance(data["tags"], list) else [data["tags"]]
         normalized = normalize_tags(raw)
         if normalized != data["tags"]:
-            changes.append(f"tags: 规范化为 {normalized}")
+            changes.append(f"tags: normalized to {normalized}")
         data["tags"] = normalized
 
     hero = data.get("heroImage")
@@ -281,19 +293,19 @@ def build_fixed(frontmatter: dict, article_dir: Path, args) -> tuple[dict, list[
         hero = dict(hero)
         src = str(hero.get("src", "")).strip()
         if not src:
-            raise FixError("heroImage.src 缺失")
+            raise FixError("heroImage.src is missing")
         hero["src"] = src
         if "alt" not in hero and data.get("title"):
             hero["alt"] = str(data["title"])
-            changes.append("heroImage.alt: 使用文章标题")
+            changes.append("heroImage.alt: derived from the article title")
         color = hero.get("color")
         if not color and src.startswith(("./", "/")):
             extracted = dominant_color(article_dir / src.lstrip("./")) if not src.startswith("/") else None
             if extracted:
                 hero["color"] = extracted
-                changes.append(f"heroImage.color: 提取为 {extracted}")
+                changes.append(f"heroImage.color: extracted {extracted}")
         elif color and not HEX_RE.match(str(color)):
-            changes.append(f"heroImage.color: 格式无效，移除 {color!r}")
+            changes.append(f"heroImage.color: invalid format, removed {color!r}")
             hero.pop("color", None)
         ordered_hero = {key: hero[key] for key in ("src", "alt", "inferSize", "width", "height", "color") if key in hero}
         ordered_hero.update({key: value for key, value in hero.items() if key not in ordered_hero})
@@ -308,30 +320,33 @@ def build_fixed(frontmatter: dict, article_dir: Path, args) -> tuple[dict, list[
             if color:
                 new_hero["color"] = color
             data["heroImage"] = new_hero
-            changes.append(f"heroImage: 自动生成为 {new_hero}")
+            changes.append(f"heroImage: generated as {new_hero}")
         else:
-            changes.append("heroImage: 目录中没有图片，跳过")
+            changes.append("heroImage: no image found in the directory, skipped")
     else:
-        raise FixError("heroImage 格式无效（应为对象）")
+        raise FixError("heroImage has an invalid format (expected a mapping)")
 
     for key, default in (("draft", False), ("comment", True)):
         if key not in data:
             data[key] = default
-            changes.append(f"{key}: 默认 {default}")
+            changes.append(f"{key}: defaulted to {default}")
         elif not isinstance(data[key], bool):
-            changes.append(f"{key}: 类型无效，重置为 {default}")
+            changes.append(f"{key}: invalid type, reset to {default}")
             data[key] = default
 
     if "language" not in data:
         data["language"] = DEFAULTS["language"]
-        changes.append(f"language: 默认 {DEFAULTS['language']}")
+        changes.append(f"language: defaulted to {DEFAULTS['language']}")
     else:
         language = str(data["language"]).strip()
         if CJK_RE.search(language):
             mapped = LANGUAGE_MAP.get(language)
             if mapped is None:
-                raise FixError(f"language 无法自动转换：{language!r}，请使用英文单词")
-            changes.append(f"language: 从 {language!r} 转换为 {mapped}")
+                raise FixError(
+                    f"language cannot be converted automatically: {language!r}, "
+                    "please use an English word"
+                )
+            changes.append(f"language: converted {language!r} to {mapped}")
             data["language"] = mapped
         else:
             data["language"] = language
@@ -339,19 +354,19 @@ def build_fixed(frontmatter: dict, article_dir: Path, args) -> tuple[dict, list[
     if args.ai:
         ai_value = str(args.ai).strip().lower()
         if ai_value not in AI_VALUES:
-            raise FixError(f"--ai 只能是 human / assisted / ai（收到 {ai_value!r}）")
+            raise FixError(f"--ai must be one of human / assisted / ai (got {ai_value!r})")
         if data.get("ai") != ai_value:
-            changes.append(f"ai: 设置为 {ai_value}")
+            changes.append(f"ai: set to {ai_value}")
         data["ai"] = ai_value
     elif "ai" not in data:
         data["ai"] = DEFAULTS["ai"]
-        changes.append(f"ai: 默认 {DEFAULTS['ai']}（请与用户确认是否 human/assisted/ai）")
+        changes.append(f"ai: defaulted to {DEFAULTS['ai']} (confirm human/assisted/ai with the user)")
     else:
         ai_value = str(data["ai"]).strip().lower()
         if ai_value not in AI_VALUES:
-            raise FixError(f"ai 取值无效：{data['ai']!r}")
+            raise FixError(f"ai has an invalid value: {data['ai']!r}")
         if ai_value != data["ai"]:
-            changes.append(f"ai: 规范为 {ai_value}")
+            changes.append(f"ai: normalized to {ai_value}")
         data["ai"] = ai_value
 
     ordered = {key: data[key] for key in CANONICAL_ORDER if key in data}
@@ -371,22 +386,22 @@ def render(frontmatter: dict, body: str, created_from_scratch: bool = False) -> 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("target", help="文章目录或 index.md/index.mdx 文件路径")
-    parser.add_argument("--check", action="store_true", help="只校验，不写文件；有违规时退出码为 1")
-    parser.add_argument("--dry-run", action="store_true", help="只输出将要做的修改，不写文件")
-    parser.add_argument("--init", action="store_true", help="为没有 frontmatter 的新文章生成完整 frontmatter")
-    parser.add_argument("--title", help="标题（--init 时必填）")
-    parser.add_argument("--description", help="描述（10-160 字符）")
-    parser.add_argument("--tags", help="逗号分隔的标签")
-    parser.add_argument("--hero-image", help="指定封面图文件名（相对文章目录）")
-    parser.add_argument("--publish-date", help="覆盖 publishDate，如 2026-08-07")
-    parser.add_argument("--updated-date", nargs="?", const=True, help="设置 updatedDate 为今天，或指定日期")
-    parser.add_argument("--ai", choices=["human", "assisted", "ai"], help="内容创作方式")
-    parser.add_argument("--language", help="语言（英文单词，如 Chinese）")
-    parser.add_argument("--draft", dest="draft", action="store_true", help="标记为草稿")
+    parser.add_argument("target", help="article directory or index.md/index.mdx path")
+    parser.add_argument("--check", action="store_true", help="validate only, do not write; exit code 1 on violations")
+    parser.add_argument("--dry-run", action="store_true", help="print planned changes without writing")
+    parser.add_argument("--init", action="store_true", help="scaffold full frontmatter for a new article")
+    parser.add_argument("--title", help="article title (required with --init)")
+    parser.add_argument("--description", help="article description (10-160 characters)")
+    parser.add_argument("--tags", help="comma-separated tags")
+    parser.add_argument("--hero-image", help="cover image file name relative to the article directory")
+    parser.add_argument("--publish-date", help="override publishDate, e.g. 2026-08-07")
+    parser.add_argument("--updated-date", nargs="?", const=True, help="set updatedDate to today, or to a given date")
+    parser.add_argument("--ai", choices=["human", "assisted", "ai"], help="how the content was written")
+    parser.add_argument("--language", help="language as an English word, e.g. Chinese")
+    parser.add_argument("--draft", dest="draft", action="store_true", help="mark as draft")
     parser.add_argument("--no-draft", dest="draft", action="store_false")
     parser.set_defaults(draft=None)
-    parser.add_argument("--comment", dest="comment", action="store_true", help="开启评论")
+    parser.add_argument("--comment", dest="comment", action="store_true", help="enable comments")
     parser.add_argument("--no-comment", dest="comment", action="store_false")
     parser.set_defaults(comment=None)
     args = parser.parse_args()
@@ -394,7 +409,7 @@ def main() -> int:
     target = Path(args.target)
     if not target.exists():
         if not args.init:
-            print(f"错误：路径不存在：{target}")
+            print(f"Error: path does not exist: {target}")
             return 2
         if target.suffix:
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -403,7 +418,7 @@ def main() -> int:
 
     file_path = find_article_file(target)
     if file_path is None and not (args.init and target.is_dir()):
-        print(f"错误：未找到 index.md 或 index.mdx（{target}）")
+        print(f"Error: no index.md or index.mdx found ({target})")
         return 2
 
     if file_path is None:
@@ -418,10 +433,10 @@ def main() -> int:
             try:
                 frontmatter = yaml.safe_load(fm_text)
             except yaml.YAMLError as exc:
-                print(f"错误：frontmatter YAML 解析失败：{exc}")
+                print(f"Error: failed to parse frontmatter YAML: {exc}")
                 return 2
             if not isinstance(frontmatter, dict):
-                print("错误：frontmatter 必须是 YAML 对象")
+                print("Error: frontmatter must be a YAML mapping")
                 return 2
         else:
             frontmatter = {}
@@ -429,11 +444,11 @@ def main() -> int:
 
     if args.check:
         if not had_frontmatter:
-            print("错误：未找到 frontmatter（新文章可用 --init 生成）")
+            print("Error: no frontmatter found (use --init to create one for a new article)")
             return 1
         issues = validate(frontmatter, file_path.parent)
         if not issues:
-            print("OK：frontmatter 符合规范")
+            print("OK: frontmatter is valid")
             return 0
         for severity, message in issues:
             print(f"{severity}: {message}")
@@ -441,7 +456,7 @@ def main() -> int:
 
     if args.init and not had_frontmatter:
         if not args.title or not args.description:
-            print("错误：--init 需要 --title 和 --description")
+            print("Error: --init requires --title and --description")
             return 2
         scaffold = {"title": args.title, "description": args.description}
         scaffold["publishDate"] = args.publish_date or date.today().isoformat()
@@ -452,49 +467,49 @@ def main() -> int:
     try:
         fixed, changes = build_fixed(frontmatter, file_path.parent, args)
     except FixError as exc:
-        print(f"错误：{exc}")
+        print(f"Error: {exc}")
         return 2
 
     if had_frontmatter and fm_text is not None and re.search(r"heroImage\s*:\s*\{", fm_text):
-        changes.append("heroImage: 已从单行对象转换为多行缩进格式")
+        changes.append("heroImage: converted from a single-line mapping to indented block style")
 
     for option_key, key in (("draft", "draft"), ("comment", "comment")):
         value = getattr(args, option_key)
         if value is not None and fixed.get(key) != value:
-            changes.append(f"{key}: 设置为 {value}")
+            changes.append(f"{key}: set to {value}")
             fixed[key] = value
     if args.language:
         if CJK_RE.search(args.language):
-            print(f"错误：--language 需使用英文单词，收到 {args.language!r}")
+            print(f"Error: --language must be an English word, got {args.language!r}")
             return 2
         if fixed.get("language") != args.language:
-            changes.append(f"language: 设置为 {args.language}")
+            changes.append(f"language: set to {args.language}")
         fixed["language"] = args.language
     if args.tags and not (args.init and not had_frontmatter):
         parsed_tags = [tag.strip() for tag in args.tags.split(",") if tag.strip()]
         normalized = normalize_tags(parsed_tags)
         if fixed.get("tags") != normalized:
-            changes.append(f"tags: 设置为 {normalized}")
+            changes.append(f"tags: set to {normalized}")
         fixed["tags"] = normalized
 
     output = render(fixed, body, created_from_scratch=not had_frontmatter)
 
     if not changes:
-        print("无需修改：frontmatter 已符合规范")
+        print("No changes: frontmatter already valid")
         if args.dry_run:
             print(output)
         return 0
 
-    print(f"目标：{file_path}")
+    print(f"Target: {file_path}")
     for change in changes:
         print(f"  - {change}")
     if args.dry_run:
-        print("（dry-run，未写入）")
+        print("(dry-run, nothing written)")
         print(output)
         return 0
 
     file_path.write_text(output, encoding="utf-8")
-    print(f"已写入：{file_path}")
+    print(f"Written: {file_path}")
     return 0
 
 
