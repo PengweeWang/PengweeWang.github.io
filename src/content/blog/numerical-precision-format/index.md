@@ -3,9 +3,9 @@ title: 模型参数数值精度格式
 description: 浮点数由符号位、指数位与尾数位组成，决定动态范围与精度；本文对比 FP32、TF32、FP16、BF16、FP8 的位宽、范围与算力定位，说明混合精度训练与推理中的格式取舍。
 publishDate: '2026-10-27'
 tags:
-- 浮点数
-- 混合精度
-- 深度学习
+- floating point
+- mixed precision
+- deep learning
 draft: false
 language: Chinese
 comment: true
